@@ -84,7 +84,7 @@ namespace XmlToPdfConverter.Core.Engine
                     // Progression plus fluide pendant l'attente
                     int elapsed = 0;
                     const int checkInterval = 300; // Vérifier toutes les 300ms
-                    const int maxWaitTime = 600000;
+                    const int maxWaitTime = 1800000;
 
                     while (!process.WaitForExit(checkInterval) && elapsed < maxWaitTime)
                     {

@@ -629,14 +629,8 @@ namespace XmlToPdfConverter.GUI
                     Task<string> errorTask = process.StandardError.ReadToEndAsync();
                     Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
 
-                    bool finished = process.WaitForExit(600000);
+                    process.WaitForExit(); // Attente infinie
 
-                    if (!finished)
-                    {
-                        process.Kill();
-                        LogMessage("✗ Timeout lors de la conversion Chrome (60s)");
-                        return false;
-                    }
 
                     LogMessage($"Code de retour Chrome: {process.ExitCode}");
 
@@ -670,7 +664,7 @@ namespace XmlToPdfConverter.GUI
                 }
 
                 // Vérification optimisée de la création du PDF
-                int maxWait = 15;
+                int maxWait = 10000;
                 for (int i = 0; i < maxWait; i++)
                 {
                     if (File.Exists(pdfPath))
