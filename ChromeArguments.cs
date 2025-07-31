@@ -1,19 +1,15 @@
-﻿using System;
-using System.IO;
-
-namespace XmlToPdfConverter.Core.Engine
+﻿namespace XmlToPdfConverter.Core.Engine
 {
     public static class ChromeArguments
     {
         public static string[] GetChromeArguments(string pdfPath, string xmlUrl, string profilePath)
         {
-            return new string[] 
+            return new string[]
             {
                 "--headless",
                 "--disable-gpu",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
-                "--aggressive-cache-discard",
                 "--disable-background-networking",
                 "--disable-default-apps",
                 "--disable-extensions",
@@ -30,12 +26,11 @@ namespace XmlToPdfConverter.Core.Engine
                 "--disable-background-timer-throttling",
                 "--disable-backgrounding-occluded-windows",
                 "--disable-renderer-backgrounding",
-                "--virtual-time-budget=3000",
                 "--print-to-pdf-display-header-footer",
                 "--print-to-pdf-header",
                 "--print-to-pdf-footer",
                 "--memory-pressure-off",
-                "--max_old_space_size=4096",
+                "--max_old_space_size=4092",
                 "--run-all-compositor-stages-before-draw",
                 "--no-first-run",
                 "--disable-dev-tools",

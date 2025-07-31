@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace XmlToPdfConverter.Core.Interfaces
+﻿namespace XmlToPdfConverter.Core.Interfaces
 {
     public enum LogLevel
     {

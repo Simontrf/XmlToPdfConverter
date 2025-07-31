@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace XmlToPdfConverter.Core.Configuration
+﻿namespace XmlToPdfConverter.Core.Configuration
 {
     public interface IChromePathResolver
     {
