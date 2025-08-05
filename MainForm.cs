@@ -635,7 +635,7 @@ namespace XmlToPdfConverter.GUI
                     Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
 
                     var feedbackStopwatch = Stopwatch.StartNew();
-                    int feedbackInterval = 120000; // 5 secondes
+                    int feedbackInterval = 120000; // 2 minutes
 
                     while (!process.HasExited)
                     {
@@ -648,10 +648,11 @@ namespace XmlToPdfConverter.GUI
                         }
 
                         var elapsed = feedbackStopwatch.Elapsed;
-                        LogMessage($"⏳ Chrome en cours... ({elapsed.Minutes:D2}:{elapsed.Seconds:D2}) [Cliquez 'Annuler' pour arrêter]");
+                        LogMessage($"⏳ Chrome en cours... ({elapsed.Hours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}) [Cliquez 'Annuler' pour arrêter]");
                     }
 
-                    LogMessage($"✓ Chrome terminé après {feedbackStopwatch.Elapsed.TotalSeconds:F1}s");
+                    var elapsed1 = feedbackStopwatch.Elapsed;
+                    LogMessage($"✓ Chrome terminé après {elapsed1.Hours:D2}h{elapsed1.Minutes:D2}m{elapsed1.Seconds:D2}s");
                 }
 
                 // Vérification infinie avec possibilité d'annulation
@@ -672,7 +673,8 @@ namespace XmlToPdfConverter.GUI
                         if (fileInfo.Length > 0)
                         {
                             stopwatch.Stop();
-                            LogMessage($"✓ PDF créé en {stopwatch.ElapsedMilliseconds}ms ({fileInfo.Length} octets)");
+                            var elapsed = pdfCheckStopwatch.Elapsed;
+                            LogMessage($"✓ PDF créé en {elapsed.Minutes:D2}m{elapsed.Seconds:D2}s ({fileInfo.Length} octets)");
                             return true;
                         }
                     }
@@ -782,8 +784,6 @@ namespace XmlToPdfConverter.GUI
             }
         }
 
-        // Supprimez complètement votre ancienne méthode ConvertToPdf()
-        // et remplacez SetProgressBarActive par celle-ci :
         private void SetProgressBarActive(bool active)
         {
             if (progressBar.InvokeRequired)
