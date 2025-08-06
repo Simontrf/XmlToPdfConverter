@@ -1,8 +1,10 @@
-﻿namespace XmlToPdfConverter.Core.Interfaces
+﻿using System.Threading.Tasks;
+
+namespace XmlToPdfConverter.Core.Interfaces
 {
     public interface IXmlToPdfConverter
     {
-        bool Convert(string xmlPath, string originalXmlPath, IProgressReporter progress, ILogger logger);
+        Task<bool> Convert(string xmlPath, string outputPdfPath, IProgressReporter progress, ILogger logger);
     }
 
 }
