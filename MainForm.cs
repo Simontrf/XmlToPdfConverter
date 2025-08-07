@@ -594,7 +594,7 @@ namespace XmlToPdfConverter.GUI
             }
         }
 
-        private bool XmlToPdfChromeOptimizedWithCancellation(string xmlPath, string pdfPath, CancellationToken cancellationToken)
+        private bool XmlToPdfChromeOptimized(string xmlPath, string pdfPath, CancellationToken cancellationToken)
         {
             var stopwatch = Stopwatch.StartNew();
             LogMessage("🚀 Conversion XML vers PDF optimisée avec possibilité d'annulation...");
@@ -702,6 +702,44 @@ namespace XmlToPdfConverter.GUI
             }
         }
 
+        private bool ValidateForLargeFile(string xmlPath, string xslPath)
+        {
+            try
+            {
+                var xmlInfo = new FileInfo(xmlPath);
+                var xslContent = File.ReadAllText(xslPath);
+
+                // Fichier très volumineux
+                if (xmlInfo.Length > 30 * 1024 * 1024) // > 30MB
+                {
+                    LogMessage($"⚠ Fichier XML très volumineux: {xmlInfo.Length / (1024 * 1024)} MB");
+
+                    // Vérifier si le XSL contient des éléments problématiques
+                    if (xslContent.Contains("//") || xslContent.Contains("*") ||
+                        xslContent.Contains("recursive") || xslContent.Contains("for-each"))
+                    {
+                        var result = MessageBox.Show(
+                            $"ATTENTION: Fichier de {xmlInfo.Length / (1024 * 1024)} MB avec XSL complexe.\n" +
+                            "Chrome risque de crasher ou de prendre des heures.\n" +
+                            "Continuer quand même ?",
+                            "Risque de crash Chrome",
+                            MessageBoxButtons.YesNo,
+                            MessageBoxIcon.Warning
+                        );
+
+                        return result == DialogResult.Yes;
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogMessage($"Erreur validation: {ex.Message}");
+                return false;
+            }
+        }
+
         // Nouvelle méthode qui ne touche PAS à l'UI
         private bool ConvertToPdfBackground(CancellationToken cancellationToken = default)
         {
@@ -716,6 +754,12 @@ namespace XmlToPdfConverter.GUI
                 string baseName = Path.GetFileNameWithoutExtension(xmlPath);
                 string pdfPath = txtOutputDir.Text;
 
+                if (!ValidateForLargeFile(xmlPath, txtXslFile.Text))
+                {
+                    this.Invoke(new Action(() => LogMessage("❌ Conversion annulée par l'utilisateur")));
+                    return false;
+                }
+
                 // Prétraitement XML
                 this.Invoke(new Action(() => LogMessage("🔧 Prétraitement XML...")));
                 var preprocessor = new XmlPreprocessor();
@@ -727,7 +771,7 @@ namespace XmlToPdfConverter.GUI
 
                 this.Invoke(new Action(() => LogMessage($"🎯 Début de la conversion optimisée de {baseName}")));
 
-                bool success = XmlToPdfChromeOptimizedWithCancellation(preprocessedXml, pdfPath, cancellationToken);
+                bool success = XmlToPdfChromeOptimized(preprocessedXml, pdfPath, cancellationToken);
 
                 if (!success)
                 {
