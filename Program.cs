@@ -1,148 +1,65 @@
 ﻿using System;
-using System.Diagnostics;
 using System.IO;
-using System.Threading.Tasks;
-using XmlToPdfConverter.Core.Configuration;
-using XmlToPdfConverter.Core.Engine;
-using XmlToPdfConverter.Core.Interfaces;
-using XmlToPdfConverter.Core.Logging;
-using XmlToPdfConverter.Core.Progress;
 
-namespace XmlToPdfConverter.CLI
+class Program
 {
-    internal static class Program
+    static void Main()
     {
-        [STAThread]
-        static async Task Main(string[] args)
+        try
         {
-            // Vérifier si l'option -gui est présente
-            if (args.Length > 0 && (args[0] == "-gui" || args[0] == "--gui"))
+            string config = "Release";
+            string solutionDir = Directory.GetParent(Directory.GetCurrentDirectory()).Parent.Parent.Parent.FullName;
+            if (!Directory.Exists(Path.Combine(solutionDir, "XmlToPdfConverter")))
+                solutionDir = Directory.GetParent(solutionDir).FullName;
+
+            string outputDir = Path.Combine(solutionDir, "Package");
+            string cliExe = Path.Combine(solutionDir, "XmlToPdfConverter", "XmlToPdfConverter.CLI", "bin", config, "XmlToPdfConverter.CLI.exe");
+            string guiExe = Path.Combine(solutionDir, "XmlToPdfConverter", "XmlToPdfConverter.GUI", "bin", config, "XmlToPdfConverter.GUI.exe");
+            string coreDll = Path.Combine(solutionDir, "XmlToPdfConverter", "XmlToPdfConverter.Core", "bin", config, "XmlToPdfConverter.Core.dll");
+            string chromeSrc = Path.Combine(solutionDir, "XmlToPdfConverter", "XmlToPdfConverter.Core", "chrome");
+
+            // Vérifie que les fichiers sources existent
+            if (!File.Exists(cliExe)) throw new FileNotFoundException("Fichier CLI introuvable : " + cliExe);
+            if (!File.Exists(guiExe)) throw new FileNotFoundException("Fichier GUI introuvable : " + guiExe);
+            if (!File.Exists(coreDll)) throw new FileNotFoundException("Fichier Core introuvable : " + coreDll);
+
+            // Crée le dossier Package
+            if (Directory.Exists(outputDir)) Directory.Delete(outputDir, true);
+            Directory.CreateDirectory(outputDir);
+
+            // Copie des fichiers principaux
+            File.Copy(cliExe, Path.Combine(outputDir, "XmlToPdfConverter.CLI.exe"), true);
+            File.Copy(guiExe, Path.Combine(outputDir, "XmlToPdfConverter.GUI.exe"), true);
+            File.Copy(coreDll, Path.Combine(outputDir, "XmlToPdfConverter.Core.dll"), true);
+
+            // Copie des DLL supplémentaires (depuis CLI)
+            foreach (var dll in Directory.GetFiles(Path.GetDirectoryName(cliExe), "*.dll"))
             {
-                var exePath = Path.Combine(AppContext.BaseDirectory, "XmlToPdfConverter.GUI.exe");
-                if (File.Exists(exePath))
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = exePath,
-                        UseShellExecute = true // pour ouvrir la fenêtre
-                    });
-                }
-                else
-                {
-                    Console.Error.WriteLine("Erreur : GUI introuvable à " + exePath);
-                }
-                return;
+                string dest = Path.Combine(outputDir, Path.GetFileName(dll));
+                if (!File.Exists(dest)) File.Copy(dll, dest);
             }
 
-            // Logique CLI existante
-            if (args.Length < 3 || args[0] == "--help" || args[0] == "-h")
+            // Copie du dossier Chrome
+            if (Directory.Exists(chromeSrc))
             {
-                PrintHelp();
-                Environment.Exit(2);
+                string chromeDst = Path.Combine(outputDir, "chrome");
+                CopyDirectory(chromeSrc, chromeDst);
             }
 
-            string inputXml = args[0];
-            string inputXsl = args[1];
-            string outputPdf = args[2];
-
-            await RunCLI(inputXml, inputXsl, outputPdf);
+            Console.WriteLine("✅ Packaging réussi ! Dossier créé : " + outputDir);
         }
-
-        private static async Task RunCLI(string inputXml, string inputXsl, string outputPdf)
+        catch (Exception ex)
         {
-            ILogger logger = new ConsoleLogger();
-            IProgressReporter progress = new ConsoleProgressReporter();
-
-            var chromeConfig = new ChromeConfiguration(logger);
-
-            if (!chromeConfig.IsAvailable)
-            {
-                logger.Log("Chrome portable non disponible", LogLevel.Error);
-                Environment.Exit(2);
-            }
-
-            logger.Log($"Chrome trouvé: {chromeConfig.ChromePath}", LogLevel.Info);
-            logger.Log($"Profil Chrome: {chromeConfig.ProfilePath}", LogLevel.Debug);
-
-            if (!File.Exists(inputXml))
-            {
-                logger.Log("Fichier XML introuvable: " + inputXml, LogLevel.Error);
-                Environment.Exit(2);
-            }
-
-            if (!File.Exists(inputXsl))
-            {
-                logger.Log("Fichier XSL introuvable: " + inputXsl, LogLevel.Error);
-                Environment.Exit(2);
-
-                try
-                {
-                    string xmlDir = Path.GetDirectoryName(Path.GetFullPath(inputXml));
-                    string xslFullPath = Path.GetFullPath(inputXsl);
-
-                    logger.Log($"Répertoire XML: {xmlDir}", LogLevel.Debug);
-                    logger.Log($"Chemin XSL: {xslFullPath}", LogLevel.Debug);
-                }
-                catch (Exception ex)
-                {
-                    logger.Log($"Erreur validation chemins: {ex.Message}", LogLevel.Error);
-                    Environment.Exit(2);
-                }
-            }
-
-            try
-            {
-                var preprocessor = new XmlPreprocessor();
-                string processedXml = preprocessor.Preprocess(inputXml, inputXsl, logger);
-
-                var converter = new ChromeConverter(chromeConfig.ChromePath, chromeConfig.ProfilePath);
-
-                logger.Log("Démarrage de la conversion...", LogLevel.Info);
-                bool success = await converter.Convert(processedXml, outputPdf, progress, logger);
-
-                if (File.Exists(processedXml))
-                {
-                    File.Delete(processedXml);
-                }
-
-                chromeConfig.CleanupProfile();
-
-                if (success)
-                {
-                    logger.Log("Conversion terminée avec succès.", LogLevel.Info);
-                    Environment.Exit(0);
-                }
-                else
-                {
-                    logger.Log("Échec de la conversion.", LogLevel.Error);
-                    Environment.Exit(1);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.Log($"Erreur inattendue: {ex.Message}", LogLevel.Error);
-                Environment.Exit(1);
-            }
+            Console.WriteLine("❌ Erreur pendant le packaging : " + ex.Message);
         }
+    }
 
-        private static void PrintHelp()
-        {
-            Console.WriteLine("Convertisseur XML vers PDF");
-            Console.WriteLine();
-            Console.WriteLine("Usage CLI:");
-            Console.WriteLine("  XmlToPdfConverter.CLI.exe input.xml input.xsl output.pdf");
-            Console.WriteLine();
-            Console.WriteLine("Usage GUI:");
-            Console.WriteLine("  XmlToPdfConverter.CLI.exe -gui");
-            Console.WriteLine("  XmlToPdfConverter.CLI.exe --gui");
-            Console.WriteLine();
-            Console.WriteLine("Options:");
-            Console.WriteLine("  -gui, --gui          Lance l'interface graphique");
-            Console.WriteLine("  --help, -h           Affiche cette aide");
-            Console.WriteLine();
-            Console.WriteLine("Exemples:");
-            Console.WriteLine("  XmlToPdfConverter.exe invoice.xml invoice.xsl invoice.pdf");
-            Console.WriteLine("  XmlToPdfConverter.exe -gui");
-        }
+    static void CopyDirectory(string sourceDir, string targetDir)
+    {
+        foreach (string dir in Directory.GetDirectories(sourceDir, "*", SearchOption.AllDirectories))
+            Directory.CreateDirectory(dir.Replace(sourceDir, targetDir));
+
+        foreach (string file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
+            File.Copy(file, file.Replace(sourceDir, targetDir), true);
     }
 }
