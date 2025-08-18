@@ -576,6 +576,8 @@ namespace XmlToPdfConverter.GUI
             catch (OperationCanceledException)
             {
                 LogMessage("🛑 Conversion annulée par l'utilisateur");
+                CleanupChromeProcess();
+                CleanupChromeProfile();
                 MessageBox.Show("Conversion annulée", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
@@ -693,49 +695,32 @@ namespace XmlToPdfConverter.GUI
             catch (OperationCanceledException)
             {
                 LogMessage("🛑 Conversion annulée pendant l'exécution");
+                CleanupChromeProcess();
+
+                // Tuer le processus Chrome s'il existe encore
+                try
+                {
+                    var chromeProcesses = Process.GetProcessesByName("chrome");
+                    foreach (var proc in chromeProcesses)
+                    {
+                        if (proc.StartInfo?.Arguments?.Contains(chromeProfile) == true)
+                        {
+                            proc.Kill();
+                            LogMessage("✓ Processus Chrome terminé");
+                            break;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogMessage($"⚠ Erreur arrêt Chrome: {ex.Message}");
+                }
+
                 throw;
             }
             catch (Exception ex)
             {
                 LogMessage($"✗ Erreur conversion: {ex.Message}");
-                return false;
-            }
-        }
-
-        private bool ValidateForLargeFile(string xmlPath, string xslPath)
-        {
-            try
-            {
-                var xmlInfo = new FileInfo(xmlPath);
-                var xslContent = File.ReadAllText(xslPath);
-
-                // Fichier très volumineux
-                if (xmlInfo.Length > 30 * 1024 * 1024) // > 30MB
-                {
-                    LogMessage($"⚠ Fichier XML très volumineux: {xmlInfo.Length / (1024 * 1024)} MB");
-
-                    // Vérifier si le XSL contient des éléments problématiques
-                    if (xslContent.Contains("//") || xslContent.Contains("*") ||
-                        xslContent.Contains("recursive") || xslContent.Contains("for-each"))
-                    {
-                        var result = MessageBox.Show(
-                            $"ATTENTION: Fichier de {xmlInfo.Length / (1024 * 1024)} MB avec XSL complexe.\n" +
-                            "Chrome risque de crasher ou de prendre des heures.\n" +
-                            "Continuer quand même ?",
-                            "Risque de crash Chrome",
-                            MessageBoxButtons.YesNo,
-                            MessageBoxIcon.Warning
-                        );
-
-                        return result == DialogResult.Yes;
-                    }
-                }
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                LogMessage($"Erreur validation: {ex.Message}");
                 return false;
             }
         }
@@ -753,12 +738,6 @@ namespace XmlToPdfConverter.GUI
                 string xmlPath = txtXmlFile.Text;
                 string baseName = Path.GetFileNameWithoutExtension(xmlPath);
                 string pdfPath = txtOutputDir.Text;
-
-                if (!ValidateForLargeFile(xmlPath, txtXslFile.Text))
-                {
-                    this.Invoke(new Action(() => LogMessage("❌ Conversion annulée par l'utilisateur")));
-                    return false;
-                }
 
                 // Prétraitement XML
                 this.Invoke(new Action(() => LogMessage("🔧 Prétraitement XML...")));
@@ -819,7 +798,25 @@ namespace XmlToPdfConverter.GUI
             catch (OperationCanceledException)
             {
                 this.Invoke(new Action(() => LogMessage("🛑 Conversion annulée")));
-                throw; // Re-lancer pour que l'appelant sache que c'est annulé
+
+                // Nettoyer le fichier XML prétraité si il existe
+                try
+                {
+                    string xmlPath = txtXmlFile.Text;
+                    string preprocessedPath = Path.Combine(Path.GetTempPath(), "preprocessed_*.xml");
+                    var files = Directory.GetFiles(Path.GetTempPath(), "preprocessed_*.xml");
+                    foreach (var file in files)
+                    {
+                        File.Delete(file);
+                    }
+                    this.Invoke(new Action(() => LogMessage("✓ Fichiers temporaires nettoyés")));
+                }
+                catch (Exception ex)
+                {
+                    this.Invoke(new Action(() => LogMessage($"⚠ Erreur nettoyage: {ex.Message}")));
+                }
+
+                throw;
             }
             catch (Exception ex)
             {
