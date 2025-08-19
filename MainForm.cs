@@ -69,15 +69,20 @@ namespace XmlToPdfConverter.GUI
         {
             try
             {
-                if (!Directory.Exists(chromeProfile))
+                // ✅ NETTOYER l'ancien profil s'il existe
+                if (Directory.Exists(chromeProfile))
                 {
-                    Directory.CreateDirectory(chromeProfile);
-                    LogMessage("✓ Profil Chrome persistant créé");
+                    Directory.Delete(chromeProfile, true);
+                    Thread.Sleep(1000); // Attendre la suppression
                 }
+
+                // ✅ CRÉER un nouveau profil
+                Directory.CreateDirectory(chromeProfile);
+                LogMessage("✓ Profil Chrome créé/nettoyé");
             }
             catch (Exception ex)
             {
-                LogMessage($"⚠ Erreur création profil: {ex.Message}");
+                LogMessage($"⚠ Erreur profil: {ex.Message}");
             }
         }
 
@@ -601,6 +606,29 @@ namespace XmlToPdfConverter.GUI
             var stopwatch = Stopwatch.StartNew();
             LogMessage("🚀 Conversion XML vers PDF optimisée avec possibilité d'annulation...");
 
+            // ✅ TUER TOUS LES CHROME EXISTANTS
+            try
+            {
+                var existingChromes = Process.GetProcessesByName("chrome");
+                foreach (var proc in existingChromes)
+                {
+                    if (!proc.HasExited)
+                    {
+                        proc.Kill();
+                        proc.WaitForExit(2000);
+                    }
+                    proc.Dispose();
+                }
+                LogMessage($"✓ {existingChromes.Length} processus Chrome nettoyés");
+            }
+            catch (Exception ex)
+            {
+                LogMessage($"⚠ Erreur nettoyage Chrome: {ex.Message}");
+            }
+
+            // Attendre un peu que la mémoire soit libérée
+            Thread.Sleep(3000);
+
             try
             {
                 string xmlUrl = new Uri(Path.GetFullPath(xmlPath)).AbsoluteUri;
@@ -656,6 +684,13 @@ namespace XmlToPdfConverter.GUI
                     var elapsed1 = feedbackStopwatch.Elapsed;
                     LogMessage($"✓ Chrome terminé après {elapsed1.Hours:D2}h{elapsed1.Minutes:D2}m{elapsed1.Seconds:D2}s");
                 }
+
+                // ✅ FORCER la libération mémoire
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+
+                LogMessage("✓ Mémoire libérée manuellement");
 
                 // Vérification infinie avec possibilité d'annulation
                 LogMessage("🔍 Vérification PDF...");
