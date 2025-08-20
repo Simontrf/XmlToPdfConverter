@@ -604,30 +604,7 @@ namespace XmlToPdfConverter.GUI
         private bool XmlToPdfChromeOptimized(string xmlPath, string pdfPath, CancellationToken cancellationToken)
         {
             var stopwatch = Stopwatch.StartNew();
-            LogMessage("🚀 Conversion XML vers PDF optimisée avec possibilité d'annulation...");
-
-            // ✅ TUER TOUS LES CHROME EXISTANTS
-            try
-            {
-                var existingChromes = Process.GetProcessesByName("chrome");
-                foreach (var proc in existingChromes)
-                {
-                    if (!proc.HasExited)
-                    {
-                        proc.Kill();
-                        proc.WaitForExit(2000);
-                    }
-                    proc.Dispose();
-                }
-                LogMessage($"✓ {existingChromes.Length} processus Chrome nettoyés");
-            }
-            catch (Exception ex)
-            {
-                LogMessage($"⚠ Erreur nettoyage Chrome: {ex.Message}");
-            }
-
-            // Attendre un peu que la mémoire soit libérée
-            Thread.Sleep(3000);
+            LogMessage("🚀 Conversion XML vers PDF optimisée avec possibilité d'annulation...");   
 
             try
             {
