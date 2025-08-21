@@ -41,7 +41,7 @@ namespace XmlToPdfConverter.Core.Configuration
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
             _logger?.Log($"Recherche de Chrome depuis : {baseDirectory}", LogLevel.Debug);
 
-            // Stratégie 1: Chemin relatif standard (../../chrome/bin/chrome.exe)
+            // Stratégie 1: Chemin relatif standard (../../chrome/chrome.exe)
             string standardPath = GetStandardChromePath(baseDirectory);
             if (File.Exists(standardPath))
             {
@@ -68,7 +68,7 @@ namespace XmlToPdfConverter.Core.Configuration
             string errorMessage = $"Chrome non trouvé. Chemins tentés :\n" +
                                 $"- Chemin standard : {standardPath}\n" +
                                 $"- Recherche récursive depuis : {baseDirectory}\n" +
-                                $"- Dossier Core : {Path.Combine(baseDirectory, "chrome", "bin", "chrome.exe")}";
+                                $"- Dossier Core : {Path.Combine(baseDirectory, "chrome", "chrome.exe")}";
 
             _logger?.Log(errorMessage, LogLevel.Error);
             throw new FileNotFoundException("Chrome portable non trouvé", errorMessage);
@@ -76,14 +76,14 @@ namespace XmlToPdfConverter.Core.Configuration
 
         private string GetStandardChromePath(string baseDirectory)
         {
-            // Depuis CLI ou GUI: ../../chrome/bin/chrome.exe
+            // Depuis CLI ou GUI: ../../chrome//chrome.exe
             string parentDirectory = Directory.GetParent(baseDirectory)?.FullName;
             if (parentDirectory != null)
             {
                 string solutionDirectory = Directory.GetParent(parentDirectory)?.FullName;
                 if (solutionDirectory != null)
                 {
-                    return Path.Combine(solutionDirectory, "XmlToPdfConverter.Core", "chrome", "bin", "chrome.exe");
+                    return Path.Combine(solutionDirectory, "XmlToPdfConverter.Core", "chrome", "chrome.exe");
                 }
             }
             return string.Empty;
@@ -97,14 +97,14 @@ namespace XmlToPdfConverter.Core.Configuration
             for (int level = 0; level < 4 && currentDir != null; level++)
             {
                 // Chercher dans le dossier actuel
-                string chromePath = Path.Combine(currentDir.FullName, "XmlToPdfConverter.Core", "chrome", "bin", "chrome.exe");
+                string chromePath = Path.Combine(currentDir.FullName, "XmlToPdfConverter.Core", "chrome", "chrome.exe");
                 if (File.Exists(chromePath))
                 {
                     return chromePath;
                 }
 
                 // Chercher directement un dossier chrome
-                string directChromePath = Path.Combine(currentDir.FullName, "chrome", "bin", "chrome.exe");
+                string directChromePath = Path.Combine(currentDir.FullName, "chrome", "chrome.exe");
                 if (File.Exists(directChromePath))
                 {
                     return directChromePath;
@@ -119,7 +119,7 @@ namespace XmlToPdfConverter.Core.Configuration
         private string FindChromeInCore(string baseDirectory)
         {
             // Si exécuté depuis le dossier Core lui-même
-            string corePath = Path.Combine(baseDirectory, "chrome", "bin", "chrome.exe");
+            string corePath = Path.Combine(baseDirectory, "chrome", "chrome.exe");
             if (File.Exists(corePath))
             {
                 return corePath;

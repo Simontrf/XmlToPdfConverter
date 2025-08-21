@@ -1,4 +1,6 @@
-﻿namespace XmlToPdfConverter.Core.Engine
+﻿using System.IO;
+
+namespace XmlToPdfConverter.Core.Engine
 {
     public static class ChromeArguments
     {
@@ -6,48 +8,44 @@
         {
             return new string[]
             {
-                "--headless",
-                //"--window-size=1920,1080",
-                
-                // SÉCURITÉ ET PERMISSIONS
-                "--allow-running-insecure-content",
-                "--allow-file-access-from-files",
-                
-                // OPTIMISATIONS SYSTÈME
-                "--disable-dev-shm-usage",
-                "--disable-background-networking",
-                "--disable-default-apps",
-                "--disable-extensions",
-                "--disable-sync",
-                "--disable-translate",
-                
-                // MÉMOIRE CORRIGÉE
-                "--js-flags=--max-old-space-size=2048 --max-semi-space-size=256",
-                "--memory-pressure-off",
-                "--force-gpu-mem-available-mb=1024",
-                
-                // RENDU ET PERFORMANCE
-                "--disable-background-timer-throttling",
-                "--disable-backgrounding-occluded-windows",
-                "--disable-renderer-backgrounding",
-                "--run-all-compositor-stages-before-draw",
-                "--disable-hang-monitor",
-                
-                // COULEURS (version compatible)
-                "--print-backgrounds",
-                
-                // CONFIGURATION
-                "--no-first-run",
-                "--disable-component-update",
-                "--disable-domain-reliability",
-                "--disable-client-side-phishing-detection",
-                "--disable-background-mode",
-                
-                // PROFIL ET SORTIE
-                $"--user-data-dir=\"{profilePath}\"",
-                $"--print-to-pdf=\"{pdfPath}\"",
-
-                xmlUrl
+        "--headless",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        
+        // ✅ RENDU COMPLET FORCÉ
+        "--disable-partial-raster",
+        "--disable-threaded-compositing",
+        "--disable-checker-imaging",
+        "--run-all-compositor-stages-before-draw",
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding",
+        "--disable-backgrounding-occluded-windows",
+        
+        // ✅ POLICES ET TEXTE
+        "--disable-font-subpixel-positioning",
+        "--enable-font-antialiasing",
+        "--force-device-scale-factor=1.0",
+        
+        // ✅ TIMEOUT ÉTENDU
+        "--virtual-time-budget=30000", // 30 secondes pour le rendu
+        "--timeout=60000",
+        
+        // Mémoire
+        "--js-flags=--max-old-space-size=8192",
+        "--memory-pressure-off",
+        
+        // Sécurité et permissions
+        "--disable-web-security",
+        "--allow-file-access-from-files",
+        "--allow-running-insecure-content",
+        
+        // PDF et couleurs
+        "--print-backgrounds",
+        
+        // Configuration
+        $"--user-data-dir=\"{profilePath}\"",
+        $"--print-to-pdf=\"{pdfPath}\"",
+        xmlUrl
             };
         }
     }

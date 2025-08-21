@@ -9,14 +9,14 @@ class Program
         {
             string config = "Release";
             string solutionDir = Directory.GetParent(Directory.GetCurrentDirectory()).Parent.Parent.Parent.FullName;
-            if (!Directory.Exists(Path.Combine(solutionDir, "XmlToPdfConverter")))
+            if (!Directory.Exists(Path.Combine(solutionDir, "XmlToPdfConverter_64bits")))
                 solutionDir = Directory.GetParent(solutionDir).FullName;
 
-            string outputDir = Path.Combine(solutionDir, "Package");
-            string cliExe = Path.Combine(solutionDir, "XmlToPdfConverter", "XmlToPdfConverter.CLI", "bin", config, "XmlToPdfConverter.CLI.exe");
-            string guiExe = Path.Combine(solutionDir, "XmlToPdfConverter", "XmlToPdfConverter.GUI", "bin", config, "XmlToPdfConverter.GUI.exe");
-            string coreDll = Path.Combine(solutionDir, "XmlToPdfConverter", "XmlToPdfConverter.Core", "bin", config, "XmlToPdfConverter.Core.dll");
-            string chromeSrc = Path.Combine(solutionDir, "XmlToPdfConverter", "XmlToPdfConverter.Core", "chrome");
+            string outputDir = Path.Combine(solutionDir, "Package_64bits");
+            string cliExe = Path.Combine(solutionDir, "XmlToPdfConverter_64bits", "XmlToPdfConverter.CLI", "bin", config, "XmlToPdfConverter.CLI.exe");
+            string guiExe = Path.Combine(solutionDir, "XmlToPdfConverter_64bits", "XmlToPdfConverter.GUI", "bin", config, "XmlToPdfConverter.GUI.exe");
+            string coreDll = Path.Combine(solutionDir, "XmlToPdfConverter_64bits", "XmlToPdfConverter.Core", "bin", config, "XmlToPdfConverter.Core.dll");
+            string chromeSrc = Path.Combine(solutionDir, "XmlToPdfConverter_64bits", "XmlToPdfConverter.Core", "chrome");
 
             // Vérifie que les fichiers sources existent
             if (!File.Exists(cliExe)) throw new FileNotFoundException("Fichier CLI introuvable : " + cliExe);
