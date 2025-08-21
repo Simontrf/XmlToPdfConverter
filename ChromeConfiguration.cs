@@ -70,7 +70,6 @@ namespace XmlToPdfConverter.Core.Configuration
                 }
             }
         }
-
         public bool IsAvailable => _pathResolver.IsChromeAvailable();
     }
 }

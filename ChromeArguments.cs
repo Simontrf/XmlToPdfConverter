@@ -1,60 +1,52 @@
-﻿using System.IO;
-
-namespace XmlToPdfConverter.Core.Engine
+﻿namespace XmlToPdfConverter.Core.Engine
 {
     public static class ChromeArguments
     {
         public static string[] GetChromeArguments(string pdfPath, string xmlUrl, string profilePath)
         {
-            // Récupère le dossier où se trouve chrome.exe portable
-            string chromeDir = Path.GetDirectoryName(profilePath);
-            if (string.IsNullOrEmpty(chromeDir) || !Directory.Exists(chromeDir))
-                chromeDir = Directory.GetCurrentDirectory();
-
-            // Fichier de log interne Chrome (sera écrasé à chaque run)
-            string chromeDebugLog = Path.Combine(chromeDir, "chrome_debug.log");
-
             return new string[]
             {
-                //"--headless",
+                "--headless",
+                //"--window-size=1920,1080",
+                
+                // SÉCURITÉ ET PERMISSIONS
+                "--allow-running-insecure-content",
+                "--allow-file-access-from-files",
+                
+                // OPTIMISATIONS SYSTÈME
                 "--disable-dev-shm-usage",
                 "--disable-background-networking",
                 "--disable-default-apps",
                 "--disable-extensions",
                 "--disable-sync",
                 "--disable-translate",
-                "--disable-ipc-flooding-protection",
-                "--allow-running-insecure-content",
-                "--allow-file-access-from-files",
-                "--enable-logging=stderr",
-                "--log-level=0",
-                "--v=1",
-                "--vmodule=*=1",
-                $"--log-file={chromeDebugLog}",
-                $"--user-data-dir=\"{profilePath}\"",
+                
+                // MÉMOIRE CORRIGÉE
+                "--js-flags=--max-old-space-size=2048 --max-semi-space-size=256",
+                "--memory-pressure-off",
+                "--force-gpu-mem-available-mb=1024",
+                
+                // RENDU ET PERFORMANCE
                 "--disable-background-timer-throttling",
                 "--disable-backgrounding-occluded-windows",
                 "--disable-renderer-backgrounding",
-                "--force-color-profile=srgb",
-                "--disable-background-graphics=false",
-                "-webkit-print-color-adjust=exact",
-                "--print-backgrounds",
-                "--force-color-profile=srgb",
-                "--disable-background-graphics=false",
-                "--memory-pressure-off=true",
-                "--max-heap-size=512000",
-                "--max-old-space-size=8192",
-                "--js-flags=--max-old-space-size=8192",
-                "--force-gpu-mem-available-mb=4096",
                 "--run-all-compositor-stages-before-draw",
-                //"--no-first-run",
-                "--ash-no-nudges",//remplace no first run
                 "--disable-hang-monitor",
+                
+                // COULEURS (version compatible)
+                "--print-backgrounds",
+                
+                // CONFIGURATION
+                "--no-first-run",
                 "--disable-component-update",
                 "--disable-domain-reliability",
                 "--disable-client-side-phishing-detection",
                 "--disable-background-mode",
+                
+                // PROFIL ET SORTIE
+                $"--user-data-dir=\"{profilePath}\"",
                 $"--print-to-pdf=\"{pdfPath}\"",
+
                 xmlUrl
             };
         }

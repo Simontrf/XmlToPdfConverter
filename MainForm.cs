@@ -604,7 +604,7 @@ namespace XmlToPdfConverter.GUI
         private bool XmlToPdfChromeOptimized(string xmlPath, string pdfPath, CancellationToken cancellationToken)
         {
             var stopwatch = Stopwatch.StartNew();
-            LogMessage("🚀 Conversion XML vers PDF optimisée avec possibilité d'annulation...");   
+            LogMessage("🚀 Conversion XML vers PDF optimisée avec possibilité d'annulation...");
 
             try
             {
