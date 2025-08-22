@@ -3,10 +3,10 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using XmlToPdfConverter.Core.Configuration;
-using XmlToPdfConverter.Core.Engine;
+using XmlToPdfConverter.Core.Interfaces;
+using XmlToPdfConverter.Core.Services;
 
 
 namespace XmlToPdfConverter.GUI
@@ -20,9 +20,9 @@ namespace XmlToPdfConverter.GUI
         private string chromePath = "";
         private string basePath = "";
         private string chromeProfile = ""; // Persistant
-        private readonly Process chromeProcess; // Processus Chrome persistant
-        private readonly ChromePathResolver _chromeResolver;
-        private CancellationTokenSource _conversionCancellation;
+        private readonly ChromeConversionService _conversionService;
+        private readonly AppConfiguration _appConfig;
+        private readonly IResourceManager _resourceManager;
 
         // Contrôles UI
         private TextBox txtXmlFile;
@@ -39,51 +39,15 @@ namespace XmlToPdfConverter.GUI
         public MainForm()
         {
             InitializeComponent();
-            _chromeResolver = new ChromePathResolver(new GuiLogger(rtbLog));
 
-            InitializePaths();
+            _appConfig = new AppConfiguration();
+            _resourceManager = new ResourceManager(new GuiLogger(rtbLog));
+
+            var logger = new GuiLogger(rtbLog);
+            _conversionService = new ChromeConversionService(logger, _appConfig, _resourceManager);
+
             CheckDependencies();
-            InitializeChromeProfile();
-        }
-
-        private void InitializePaths()
-        {
-            basePath = Application.StartupPath;
-
-            try
-            {
-                chromePath = _chromeResolver.GetChromeExecutablePath();
-                LogMessage($"✓ Chrome trouvé via resolver: {chromePath}");
-            }
-            catch (Exception ex)
-            {
-                LogMessage($"✗ Erreur résolution Chrome: {ex.Message}");
-                chromePath = null;
-            }
-
-            // Profil temporaire (comme CLI)
-            chromeProfile = Path.Combine(Path.GetTempPath(), "chrome-profile-gui-" + Guid.NewGuid());
-        }
-
-        private void InitializeChromeProfile()
-        {
-            try
-            {
-                // ✅ NETTOYER l'ancien profil s'il existe
-                if (Directory.Exists(chromeProfile))
-                {
-                    Directory.Delete(chromeProfile, true);
-                    Thread.Sleep(1000); // Attendre la suppression
-                }
-
-                // ✅ CRÉER un nouveau profil
-                Directory.CreateDirectory(chromeProfile);
-                LogMessage("✓ Profil Chrome créé/nettoyé");
-            }
-            catch (Exception ex)
-            {
-                LogMessage($"⚠ Erreur profil: {ex.Message}");
-            }
+            TestNewArchitecture();
         }
 
         private void InitializeComponent()
@@ -302,44 +266,11 @@ namespace XmlToPdfConverter.GUI
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            // Nettoyer le processus Chrome s'il existe
-            CleanupChromeProcess();
-            CleanupChromeProfile();
+            _conversionService?.Dispose();
+            _resourceManager?.Dispose();
             base.OnFormClosing(e);
         }
 
-        private void CleanupChromeProcess()
-        {
-            try
-            {
-                if (chromeProcess != null && !chromeProcess.HasExited)
-                {
-                    chromeProcess.Kill();
-                    chromeProcess.Dispose();
-                    LogMessage("✓ Processus Chrome nettoyé");
-                }
-            }
-            catch (Exception ex)
-            {
-                LogMessage($"⚠ Erreur nettoyage Chrome: {ex.Message}");
-            }
-        }
-
-        private void CleanupChromeProfile()
-        {
-            try
-            {
-                if (Directory.Exists(chromeProfile) && chromeProfile.Contains("chrome-profile-gui-"))
-                {
-                    Directory.Delete(chromeProfile, true);
-                    LogMessage("✓ Profil Chrome temporaire supprimé");
-                }
-            }
-            catch (Exception ex)
-            {
-                LogMessage($"⚠ Erreur suppression profil: {ex.Message}");
-            }
-        }
         private void BtnBrowseXml_Click(object sender, EventArgs e)
         {
             using (OpenFileDialog ofd = new OpenFileDialog())
@@ -421,420 +352,112 @@ namespace XmlToPdfConverter.GUI
 
         private void CheckDependencies()
         {
-            LogMessage("Vérification de Chrome via ChromePathResolver...");
+            LogMessage("Vérification des dépendances...");
 
-            if (_chromeResolver.IsChromeAvailable())
+            if (_conversionService.IsAvailable)
             {
-                LogMessage($"✓ Chrome disponible: {chromePath}");
+                LogMessage("✓ Chrome disponible via le service de conversion");
             }
             else
             {
                 LogMessage("✗ Chrome non disponible");
                 LogMessage("→ Vérifiez l'installation de Chrome portable");
-                chromePath = null;
             }
         }
 
         private bool ValidateInputs()
         {
-            // Vérifier si le fichier XML est spécifié
             if (string.IsNullOrEmpty(txtXmlFile.Text))
             {
-                MessageBox.Show("Veuillez sélectionner un fichier XML", "Attention",
-                               MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Veuillez sélectionner un fichier XML", "Attention", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
 
-            // Vérifier si le fichier XML existe
             if (!File.Exists(txtXmlFile.Text))
             {
-                MessageBox.Show("Le fichier XML spécifié n'existe pas", "Erreur",
-                               MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Le fichier XML spécifié n'existe pas", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return false;
             }
 
-            // Vérifier si le fichier XSL est spécifié
             if (string.IsNullOrEmpty(txtXslFile.Text))
             {
-                MessageBox.Show("Veuillez sélectionner un fichier XSL", "Attention",
-                               MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Veuillez sélectionner un fichier XSL", "Attention", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
 
-            // Vérifier si le fichier XSL existe
             if (!File.Exists(txtXslFile.Text))
             {
-                MessageBox.Show("Le fichier XSL spécifié n'existe pas", "Erreur",
-                               MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Le fichier XSL spécifié n'existe pas", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return false;
             }
 
-            // Vérifier si le dossier de sortie est spécifié
             if (string.IsNullOrEmpty(txtOutputDir.Text))
             {
-                MessageBox.Show("Veuillez sélectionner un dossier de sortie", "Attention",
-                               MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Veuillez sélectionner un dossier de sortie", "Attention", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
 
-            // Vérifier si le dossier de sortie existe, sinon essayer de le créer
-            string outputDir = Path.GetDirectoryName(txtOutputDir.Text);
-            if (!Directory.Exists(outputDir))
-            {
-                try
-                {
-                    Directory.CreateDirectory(outputDir);
-                    LogMessage($"✓ Dossier de sortie créé: {outputDir}");
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Impossible de créer le dossier de sortie:\n{ex.Message}",
-                                   "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return false;
-                }
-            }
-
-            // Vérifier la cohérence des chemins XML/XSL
-            try
-            {
-                string xmlDir = Path.GetDirectoryName(Path.GetFullPath(txtXmlFile.Text));
-                string xslPath = Path.GetFullPath(txtXslFile.Text);
-
-                // Tester si le XSL est accessible depuis le répertoire XML
-                if (!File.Exists(xslPath))
-                {
-                    MessageBox.Show($"Le fichier XSL n'est pas accessible : {xslPath}",
-                                   "Erreur de chemin", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return false;
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Erreur de validation des chemins : {ex.Message}",
-                               "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return false;
-            }
-
-            if (!_chromeResolver.IsChromeAvailable())
-            {
-                MessageBox.Show("Chrome n'est pas disponible.\n" +
-                               "Vérifiez l'installation de Chrome portable.",
-                               "Chrome manquant", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return false;
-            }
-
-            // Mettre à jour les variables de chemin
-            xmlFilePath = txtXmlFile.Text;
-            outputDirectoryPath = txtOutputDir.Text;
-
+            // Le service se chargera de valider Chrome et créer les dossiers
             return true;
         }
 
         private async void BtnConvert_Click(object sender, EventArgs e)
         {
-            if (!ValidateInputs())
-                return;
-
-            // Si une conversion est en cours, permettre l'annulation
-            if (_conversionCancellation != null && !_conversionCancellation.Token.IsCancellationRequested)
-            {
-                var result = MessageBox.Show("Une conversion est en cours. Voulez-vous l'annuler ?",
-                                           "Annuler la conversion",
-                                           MessageBoxButtons.YesNo,
-                                           MessageBoxIcon.Question);
-
-                if (result == DialogResult.Yes)
-                {
-                    _conversionCancellation.Cancel();
-                    LogMessage("🛑 Annulation demandée par l'utilisateur");
-                    return;
-                }
-                else
-                {
-                    return; // Ne pas démarrer une nouvelle conversion
-                }
-            }
-
-            btnConvert.Text = "Annuler";
-            btnConvert.BackColor = Color.FromArgb(220, 53, 69); // Rouge
-            progressBar.MarqueeAnimationSpeed = 30;
-
-            _conversionCancellation = new CancellationTokenSource();
+            if (!ValidateInputs()) return;
 
             try
             {
-                // Exécuter la conversion dans un thread en arrière-plan
-                bool success = await Task.Run(() => ConvertToPdfBackground(_conversionCancellation.Token),
-                                             _conversionCancellation.Token);
+                var progress = new Progress<ConversionProgress>(UpdateProgress);
 
-                // Ces lignes s'exécutent dans le thread UI principal
-                if (success)
+                var conversionResult = await _conversionService.ConvertAsync(
+                    txtXmlFile.Text,
+                    txtXslFile.Text,
+                    txtOutputDir.Text);
+
+                if (conversionResult.Success)
                 {
-                    LogMessage("✅ Conversion terminée avec succès!");
-                }
-                else
-                {
-                    LogMessage("❌ Échec de la conversion");
-                    MessageBox.Show("Conversion échouée", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                LogMessage("🛑 Conversion annulée par l'utilisateur");
-                CleanupChromeProcess();
-                CleanupChromeProfile();
-                MessageBox.Show("Conversion annulée", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-            catch (Exception ex)
-            {
-                LogMessage($"💥 Erreur inattendue: {ex.Message}");
-                MessageBox.Show($"Erreur inattendue: {ex.Message}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                // Réactiver les contrôles
-                btnConvert.Text = "Convertir en PDF";
-                btnConvert.BackColor = Color.FromArgb(0, 120, 215); // Bleu original
-                btnConvert.Enabled = true;
-                progressBar.MarqueeAnimationSpeed = 0;
-                _conversionCancellation = null;
-            }
-        }
+                    LogMessage($"✅ Conversion réussie en {conversionResult.Duration.TotalMilliseconds}ms!");
 
-        private bool XmlToPdfChromeOptimized(string xmlPath, string pdfPath, CancellationToken cancellationToken)
-        {
-            var stopwatch = Stopwatch.StartNew();
-            LogMessage("🚀 Conversion XML vers PDF optimisée avec possibilité d'annulation...");   
-
-            try
-            {
-                string xmlUrl = new Uri(Path.GetFullPath(xmlPath)).AbsoluteUri;
-
-                string outputDir = Path.GetDirectoryName(pdfPath);
-                if (!Directory.Exists(outputDir))
-                {
-                    Directory.CreateDirectory(outputDir);
-                }
-
-                ProcessStartInfo startInfo = new ProcessStartInfo
-                {
-                    FileName = chromePath,
-                    Arguments = string.Join(" ", ChromeArguments.GetChromeArguments(
-                        pdfPath,
-                        xmlUrl,
-                        chromeProfile
-                    )),
-
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true
-                };
-
-                LogMessage($"URL XML: {xmlUrl}");
-                LogMessage($"PDF de sortie: {pdfPath}");
-                LogMessage("⏳ Lancement de Chrome...");
-
-                using (Process process = Process.Start(startInfo))
-                {
-                    Task<string> errorTask = process.StandardError.ReadToEndAsync();
-                    Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
-
-                    var feedbackStopwatch = Stopwatch.StartNew();
-                    int feedbackInterval = 120000; // 2 minutes
-
-                    while (!process.HasExited)
-                    {
-                        // Vérifier l'annulation
-                        cancellationToken.ThrowIfCancellationRequested();
-
-                        if (process.WaitForExit(feedbackInterval))
-                        {
-                            break;
-                        }
-
-                        var elapsed = feedbackStopwatch.Elapsed;
-                        LogMessage($"⏳ Chrome en cours... ({elapsed.Hours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}) [Cliquez 'Annuler' pour arrêter]");
-                    }
-
-                    var elapsed1 = feedbackStopwatch.Elapsed;
-                    LogMessage($"✓ Chrome terminé après {elapsed1.Hours:D2}h{elapsed1.Minutes:D2}m{elapsed1.Seconds:D2}s");
-                }
-
-                // ✅ FORCER la libération mémoire
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
-
-                LogMessage("✓ Mémoire libérée manuellement");
-
-                // Vérification infinie avec possibilité d'annulation
-                LogMessage("🔍 Vérification PDF...");
-                var pdfCheckStopwatch = Stopwatch.StartNew();
-
-                DateTime lastLogTime = DateTime.MinValue;
-
-                while (true)
-                {
-                    // Vérifier l'annulation
-                    cancellationToken.ThrowIfCancellationRequested();
-
-
-                    if (File.Exists(pdfPath))
-                    {
-                        FileInfo fileInfo = new FileInfo(pdfPath);
-                        if (fileInfo.Length > 0)
-                        {
-                            stopwatch.Stop();
-                            var elapsed = pdfCheckStopwatch.Elapsed;
-                            LogMessage($"✓ PDF créé en {elapsed.Minutes:D2}m{elapsed.Seconds:D2}s ({fileInfo.Length} octets)");
-                            return true;
-                        }
-                    }
-
-                    var now = DateTime.Now;
-                    if ((now - lastLogTime).TotalMinutes >= 4)
-                    {
-                        lastLogTime = now;
-                        var elapsed = pdfCheckStopwatch.Elapsed;
-                        LogMessage($"⏳ Attente PDF... ({elapsed.Hours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}) - [Annulable]");
-                    }
-
-                    Thread.Sleep(1000);
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                LogMessage("🛑 Conversion annulée pendant l'exécution");
-                CleanupChromeProcess();
-
-                // Tuer le processus Chrome s'il existe encore
-                try
-                {
-                    var chromeProcesses = Process.GetProcessesByName("chrome");
-                    foreach (var proc in chromeProcesses)
-                    {
-                        if (proc.StartInfo?.Arguments?.Contains(chromeProfile) == true)
-                        {
-                            proc.Kill();
-                            LogMessage("✓ Processus Chrome terminé");
-                            break;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LogMessage($"⚠ Erreur arrêt Chrome: {ex.Message}");
-                }
-
-                throw;
-            }
-            catch (Exception ex)
-            {
-                LogMessage($"✗ Erreur conversion: {ex.Message}");
-                return false;
-            }
-        }
-
-        // Nouvelle méthode qui ne touche PAS à l'UI
-        private bool ConvertToPdfBackground(CancellationToken cancellationToken = default)
-        {
-            var totalStopwatch = Stopwatch.StartNew();
-
-            try
-            {
-                // Vérifier l'annulation avant de commencer
-                cancellationToken.ThrowIfCancellationRequested();
-
-                string xmlPath = txtXmlFile.Text;
-                string baseName = Path.GetFileNameWithoutExtension(xmlPath);
-                string pdfPath = txtOutputDir.Text;
-
-                // Prétraitement XML
-                this.Invoke(new Action(() => LogMessage("🔧 Prétraitement XML...")));
-                var preprocessor = new XmlPreprocessor();
-                string xslFile = txtXslFile.Text;
-                string preprocessedXml = preprocessor.Preprocess(xmlPath, xslFile, new GuiLogger(rtbLog));
-
-                // Vérifier l'annulation après prétraitement
-                cancellationToken.ThrowIfCancellationRequested();
-
-                this.Invoke(new Action(() => LogMessage($"🎯 Début de la conversion optimisée de {baseName}")));
-
-                bool success = XmlToPdfChromeOptimized(preprocessedXml, pdfPath, cancellationToken);
-
-                if (!success)
-                {
-                    this.Invoke(new Action(() => LogMessage("✗ Échec de la conversion PDF")));
-                    return false;
-                }
-
-                if (!File.Exists(pdfPath) || new FileInfo(pdfPath).Length == 0)
-                {
-                    this.Invoke(new Action(() => LogMessage("✗ PDF manquant ou vide")));
-                    return false;
-                }
-
-                totalStopwatch.Stop();
-                var fileSize = new FileInfo(pdfPath).Length;
-
-                if (File.Exists(preprocessedXml))
-                    File.Delete(preprocessedXml);
-
-                this.Invoke(new Action(() =>
-                {
-                    LogMessage($"🏆 PDF généré avec succès en {totalStopwatch.ElapsedMilliseconds}ms ({fileSize} octets)");
-
-                    // Ouvrir le PDF si demandé
                     if (chkOpenResult.Checked)
                     {
                         try
                         {
-                            Process.Start(new ProcessStartInfo(pdfPath) { UseShellExecute = true });
-                            LogMessage("✓ PDF ouvert");
+                            Process.Start(new ProcessStartInfo(conversionResult.OutputPath) { UseShellExecute = true });
                         }
-                        catch (Exception)
+                        catch (Exception ex)
                         {
-                            LogMessage("⚠ Impossible d'ouvrir le PDF automatiquement");
+                            LogMessage($"⚠ Impossible d'ouvrir le PDF: {ex.Message}");
                         }
                     }
 
-                    LogMessage($"✅ Conversion terminée: {pdfPath}");
-                    MessageBox.Show($"Conversion réussie en {totalStopwatch.ElapsedMilliseconds}ms!\nFichier: {pdfPath}",
+                    MessageBox.Show($"Conversion réussie!\nTaille: {conversionResult.FileSizeBytes} octets\nDurée: {conversionResult.Duration.TotalMilliseconds}ms",
                                    "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }));
-
-                return true;
-            }
-            catch (OperationCanceledException)
-            {
-                this.Invoke(new Action(() => LogMessage("🛑 Conversion annulée")));
-
-                // Nettoyer le fichier XML prétraité si il existe
-                try
-                {
-                    string xmlPath = txtXmlFile.Text;
-                    string preprocessedPath = Path.Combine(Path.GetTempPath(), "preprocessed_*.xml");
-                    var files = Directory.GetFiles(Path.GetTempPath(), "preprocessed_*.xml");
-                    foreach (var file in files)
-                    {
-                        File.Delete(file);
-                    }
-                    this.Invoke(new Action(() => LogMessage("✓ Fichiers temporaires nettoyés")));
                 }
-                catch (Exception ex)
+                else
                 {
-                    this.Invoke(new Action(() => LogMessage($"⚠ Erreur nettoyage: {ex.Message}")));
+                    LogMessage($"❌ Conversion échouée: {conversionResult.ErrorMessage}");
+                    MessageBox.Show($"Conversion échouée: {conversionResult.ErrorMessage}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
-
-                throw;
-            }
-            catch (Exception ex)
+            }            
+            finally
             {
-                this.Invoke(new Action(() => LogMessage($"💥 Erreur inattendue: {ex.Message}")));
-                return false;
+                btnConvert.Text = "Convertir en PDF";
+                btnConvert.BackColor = Color.FromArgb(0, 120, 215);
+                progressBar.MarqueeAnimationSpeed = 0;
+
             }
+        }
+
+        private void UpdateProgress(ConversionProgress progress)
+        {
+            if (InvokeRequired)
+            {
+                Invoke(new Action<ConversionProgress>(UpdateProgress), progress);
+                return;
+            }
+
+            // Optionnel : mettre à jour une barre de progression numérique
+            LogMessage($"[{progress.Percentage}%] {progress.CurrentStep} (Temps écoulé: {progress.Elapsed.TotalMinutes:F1}min)");
         }
 
         private void SetProgressBarActive(bool active)
@@ -845,6 +468,21 @@ namespace XmlToPdfConverter.GUI
                 return;
             }
             progressBar.MarqueeAnimationSpeed = active ? 30 : 0;
+        }
+        private void TestNewArchitecture()
+        {
+            try
+            {
+                LogMessage("🔧 Test de la nouvelle architecture...");
+                LogMessage($"✓ Service de conversion disponible: {_conversionService.IsAvailable}");
+                LogMessage($"✓ Configuration chargée: {_appConfig != null}");
+                LogMessage($"✓ Resource Manager initialisé: {_resourceManager != null}");
+                LogMessage("✅ Architecture validée");
+            }
+            catch (Exception ex)
+            {
+                LogMessage($"❌ Erreur test architecture: {ex.Message}");
+            }
         }
     }
 }

@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using XmlToPdfConverter.Core.Interfaces;
 
 namespace XmlToPdfConverter.Core.Engine
 {
+    [System.Obsolete("Utilisez ChromeConversionService à la place. Cette classe sera supprimée dans une version future.")]
     public class ChromeConverter : IXmlToPdfConverter
     {
         private readonly string chromePath;
@@ -60,6 +60,17 @@ namespace XmlToPdfConverter.Core.Engine
                 logger?.Log("Chemin PDF absolu : " + Path.GetFullPath(pdfPath), LogLevel.Debug);
 
                 progress.Report(25, "Configuration du processus Chrome...");
+
+                string chromeDir = Path.GetDirectoryName(chromePath);
+
+                // Logs stdout et stderr dans le dossier de Chrome portable
+                string logFile = Path.Combine(chromeDir, "chrome-out.log");
+                string errorFile = Path.Combine(chromeDir, "chrome-err.log");
+
+                // Écraser anciens logs
+                if (File.Exists(logFile)) File.Delete(logFile);
+                if (File.Exists(errorFile)) File.Delete(errorFile);
+
                 ProcessStartInfo startInfo = new ProcessStartInfo
                 {
                     FileName = chromePath,
@@ -69,7 +80,7 @@ namespace XmlToPdfConverter.Core.Engine
                     WindowStyle = ProcessWindowStyle.Hidden,
                     RedirectStandardError = true,
                     RedirectStandardOutput = true,
-                    WorkingDirectory = Path.GetDirectoryName(chromePath),
+                    WorkingDirectory = chromeDir
                 };
 
                 progress.Report(30, "Lancement de Chrome...");
@@ -81,8 +92,31 @@ namespace XmlToPdfConverter.Core.Engine
 
                 using (var process = Process.Start(startInfo))
                 {
-                    Task<string> errorTask = process.StandardError.ReadToEndAsync();
-                    Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+                    var outputTask = Task.Run(async () =>
+                    {
+                        using (var outputWriter = new StreamWriter(logFile, false))
+                        {
+                            string line;
+                            while ((line = await process.StandardOutput.ReadLineAsync()) != null)
+                            {
+                                await outputWriter.WriteLineAsync($"[{DateTime.Now:HH:mm:ss}] OUT: {line}");
+                                outputWriter.Flush();
+                            }
+                        }
+                    });
+
+                    var errorTask = Task.Run(async () =>
+                    {
+                        using (var errorWriter = new StreamWriter(errorFile, false))
+                        {
+                            string line;
+                            while ((line = await process.StandardError.ReadLineAsync()) != null)
+                            {
+                                await errorWriter.WriteLineAsync($"[{DateTime.Now:HH:mm:ss}] ERR: {line}");
+                                errorWriter.Flush();
+                            }
+                        }
+                    });
 
                     progress.Report(40, "Conversion en cours...");
 
@@ -110,57 +144,13 @@ namespace XmlToPdfConverter.Core.Engine
                         logger?.Log($"❌ Exception durant l'attente Chrome: {ex.Message}", LogLevel.Error);
                     }
 
-                    // Diagnostic détaillé après sortie
-                    string stderr = await errorTask;
-                    string stdout = await outputTask;
-
-                    if (!string.IsNullOrEmpty(stderr))
-                    {
-                        // Chercher les signes de crash
-                        if (stderr.Contains("Segmentation fault") ||
-                            stderr.Contains("Access violation") ||
-                            stderr.Contains("Out of memory") ||
-                            stderr.Contains("Stack overflow") ||
-                            stderr.Contains("EXCEPTION_") ||
-                            stderr.Contains("Fatal error"))
-                        {
-                            logger.Log("❌ CRASH DÉTECTÉ dans stderr de Chrome:", LogLevel.Error);
-                            logger.Log(stderr.Substring(0, Math.Min(500, stderr.Length)), LogLevel.Error);
-                            return false;
-                        }
-                    }
+                    process.WaitForExit();
+                    await Task.WhenAll(outputTask, errorTask);
 
                     progress.Report(70, "Vérification du statut Chrome...");
 
                     int exitCode = process.ExitCode;
                     logger?.Log($"Chrome terminé avec le code : {exitCode}", LogLevel.Debug);
-
-                    if (exitCode != 0)
-                    {
-                        string errorMsg;
-                        switch (exitCode)
-                        {
-                            case -1073741819:
-                                errorMsg = "CRASH - Violation d'accès (0xC0000005)";
-                                break;
-                            case -1073741571:
-                                errorMsg = "CRASH - Débordement de pile (Stack Overflow)";
-                                break;
-                            case -1073741515:
-                                errorMsg = "CRASH - Mémoire insuffisante";
-                                break;
-                            case 1:
-                                errorMsg = "ERREUR - Échec général de Chrome";
-                                break;
-                            default:
-                                errorMsg = $"ERREUR - Code inconnu ({exitCode})";
-                                break;
-                        }
-
-                        logger.Log($"❌ CHROME A CRASHÉ: {errorMsg}", LogLevel.Error);
-                        logger.Log("Le fichier est probablement trop volumineux pour Chrome", LogLevel.Error);
-                        return false;
-                    }
 
                     // Vérification immédiate si PDF créé
                     if (!File.Exists(pdfPath))
@@ -193,20 +183,6 @@ namespace XmlToPdfConverter.Core.Engine
                     }
 
                     progress.Report(75, "Finalisation de la conversion...");
-
-                    if (!string.IsNullOrWhiteSpace(stderr))
-                    {
-                        logger.Log("Chrome stderr complet :", LogLevel.Debug);
-                        logger.Log(stderr, LogLevel.Debug);
-
-                        // Chercher spécifiquement les erreurs fatales
-                        if (stderr.Contains("FATAL") || stderr.Contains("Segmentation fault") ||
-                            stderr.Contains("Out of memory") || stderr.Contains("Cannot create"))
-                        {
-                            logger.Log("❌ ERREUR FATALE DÉTECTÉE DANS CHROME", LogLevel.Error);
-                            return false;
-                        }
-                    }
 
                     progress.Report(85, "Attente de la création du PDF...");
                     logger?.Log("Vérification du fichier PDF à : " + pdfPath, LogLevel.Debug);

@@ -1,65 +1,187 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using XmlToPdfConverter.Core.Configuration;
+using XmlToPdfConverter.Core.Interfaces;
+using XmlToPdfConverter.Core.Logging;
+using XmlToPdfConverter.Core.Progress;
+using XmlToPdfConverter.Core.Services;
 
-class Program
+namespace XmlToPdfConverter.CLI
 {
-    static void Main()
+    class Program
     {
-        try
+        private static ChromeConversionService _conversionService;
+        private static IResourceManager _resourceManager;
+
+        static async Task<int> Main(string[] args)
         {
-            string config = "Release";
-            string solutionDir = Directory.GetParent(Directory.GetCurrentDirectory()).Parent.Parent.Parent.FullName;
-            if (!Directory.Exists(Path.Combine(solutionDir, "XmlToPdfConverter_64bits")))
-                solutionDir = Directory.GetParent(solutionDir).FullName;
-
-            string outputDir = Path.Combine(solutionDir, "Package_64bits");
-            string cliExe = Path.Combine(solutionDir, "XmlToPdfConverter_64bits", "XmlToPdfConverter.CLI", "bin", config, "XmlToPdfConverter.CLI.exe");
-            string guiExe = Path.Combine(solutionDir, "XmlToPdfConverter_64bits", "XmlToPdfConverter.GUI", "bin", config, "XmlToPdfConverter.GUI.exe");
-            string coreDll = Path.Combine(solutionDir, "XmlToPdfConverter_64bits", "XmlToPdfConverter.Core", "bin", config, "XmlToPdfConverter.Core.dll");
-            string chromeSrc = Path.Combine(solutionDir, "XmlToPdfConverter_64bits", "XmlToPdfConverter.Core", "chrome");
-
-            // Vérifie que les fichiers sources existent
-            if (!File.Exists(cliExe)) throw new FileNotFoundException("Fichier CLI introuvable : " + cliExe);
-            if (!File.Exists(guiExe)) throw new FileNotFoundException("Fichier GUI introuvable : " + guiExe);
-            if (!File.Exists(coreDll)) throw new FileNotFoundException("Fichier Core introuvable : " + coreDll);
-
-            // Crée le dossier Package
-            if (Directory.Exists(outputDir)) Directory.Delete(outputDir, true);
-            Directory.CreateDirectory(outputDir);
-
-            // Copie des fichiers principaux
-            File.Copy(cliExe, Path.Combine(outputDir, "XmlToPdfConverter.CLI.exe"), true);
-            File.Copy(guiExe, Path.Combine(outputDir, "XmlToPdfConverter.GUI.exe"), true);
-            File.Copy(coreDll, Path.Combine(outputDir, "XmlToPdfConverter.Core.dll"), true);
-
-            // Copie des DLL supplémentaires (depuis CLI)
-            foreach (var dll in Directory.GetFiles(Path.GetDirectoryName(cliExe), "*.dll"))
+            try
             {
-                string dest = Path.Combine(outputDir, Path.GetFileName(dll));
-                if (!File.Exists(dest)) File.Copy(dll, dest);
+                if (args.Length < 2)
+                {
+                    ShowUsage();
+                    return 1;
+                }
+
+                var (xmlPath, xslPath, outputPath) = ParseArguments(args);
+
+                if (!ValidateArguments(xmlPath, xslPath, outputPath))
+                {
+                    return 1;
+                }
+
+                return await ConvertAsync(xmlPath, xslPath, outputPath);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"\n💥 Erreur critique: {ex.Message}");
+                if (args.Contains("--debug"))
+                {
+                    Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                }
+                return 3;
+            }
+            finally
+            {
+                Cleanup();
+            }
+        }
+
+        private static (string xmlPath, string xslPath, string outputPath) ParseArguments(string[] args)
+        {
+            string xmlPath = args[0];
+            string xslPath = args[1];
+            string outputPath = args.Length > 2 ? args[2] : null;
+
+            // Si pas de chemin de sortie spécifié, utiliser le même dossier que le XML
+            if (string.IsNullOrEmpty(outputPath))
+            {
+                string xmlDir = Path.GetDirectoryName(Path.GetFullPath(xmlPath));
+                string baseName = Path.GetFileNameWithoutExtension(xmlPath);
+                outputPath = Path.Combine(xmlDir, baseName + ".pdf");
             }
 
-            // Copie du dossier Chrome
-            if (Directory.Exists(chromeSrc))
+            return (xmlPath, xslPath, outputPath);
+        }
+
+        private static bool ValidateArguments(string xmlPath, string xslPath, string outputPath)
+        {
+            if (!File.Exists(xmlPath))
             {
-                string chromeDst = Path.Combine(outputDir, "chrome");
-                CopyDirectory(chromeSrc, chromeDst);
+                Console.WriteLine($"❌ Fichier XML introuvable: {xmlPath}");
+                return false;
             }
 
-            Console.WriteLine("✅ Packaging réussi ! Dossier créé : " + outputDir);
+            if (!File.Exists(xslPath))
+            {
+                Console.WriteLine($"❌ Fichier XSL introuvable: {xslPath}");
+                return false;
+            }
+
+            try
+            {
+                string outputDir = Path.GetDirectoryName(Path.GetFullPath(outputPath));
+                if (!Directory.Exists(outputDir))
+                {
+                    Directory.CreateDirectory(outputDir);
+                    Console.WriteLine($"✓ Dossier de sortie créé: {outputDir}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Impossible de créer le dossier de sortie: {ex.Message}");
+                return false;
+            }
+
+            return true;
         }
-        catch (Exception ex)
+
+        private static async Task<int> ConvertAsync(string xmlPath, string xslPath, string outputPath)
         {
-            Console.WriteLine("❌ Erreur pendant le packaging : " + ex.Message);
+            var logger = new ConsoleLogger();
+            var appConfig = new AppConfiguration
+            {
+                Logging = { EnableDebugLogging = true },
+                Conversion = { OpenResultAfterConversion = false }
+            };
+
+            _resourceManager = new ResourceManager(logger);
+            _conversionService = new ChromeConversionService(logger, appConfig, _resourceManager);
+
+            if (!_conversionService.IsAvailable)
+            {
+                Console.WriteLine("❌ Chrome n'est pas disponible pour la conversion");
+                return 1;
+            }
+
+            Console.WriteLine("🚀 Début de la conversion...");
+            Console.WriteLine($"   XML : {xmlPath}");
+            Console.WriteLine($"   XSL : {xslPath}");
+            Console.WriteLine($"   PDF : {outputPath}");
+            Console.WriteLine();
+
+            var progressReporter = new ConsoleProgressReporter();
+            var progress = new Progress<ConversionProgress>(p =>
+            {
+                progressReporter.Report(p.Percentage, p.CurrentStep);
+            });
+
+            var result = await _conversionService.ConvertAsync(
+                xmlPath,
+                xslPath,
+                outputPath);
+
+            if (result.Success)
+            {
+                Console.WriteLine();
+                Console.WriteLine("✅ Conversion terminée avec succès !");
+                Console.WriteLine($"   Fichier PDF: {result.OutputPath}");
+                Console.WriteLine($"   Taille: {result.FileSizeBytes:N0} octets");
+                Console.WriteLine($"   Durée: {result.Duration.TotalSeconds:F1} secondes");
+                return 0;
+            }
+            else
+            {
+                Console.WriteLine();
+                Console.WriteLine($"❌ Échec de la conversion: {result.ErrorMessage}");
+                return 1;
+            }
         }
-    }
 
-    static void CopyDirectory(string sourceDir, string targetDir)
-    {
-        foreach (string dir in Directory.GetDirectories(sourceDir, "*", SearchOption.AllDirectories))
-            Directory.CreateDirectory(dir.Replace(sourceDir, targetDir));
+        private static void Cleanup()
+        {
+            try
+            {
+                _conversionService?.Dispose();
+                _resourceManager?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠ Erreur lors du nettoyage: {ex.Message}");
+            }
+        }
 
-        foreach (string file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
-            File.Copy(file, file.Replace(sourceDir, targetDir), true);
+        private static void ShowUsage()
+        {
+            Console.WriteLine("Convertisseur XML vers PDF (Chrome) - Version Refactorisée");
+            Console.WriteLine();
+            Console.WriteLine("USAGE:");
+            Console.WriteLine("  XmlToPdfConverter.CLI.exe <fichier.xml> <fichier.xsl> [sortie.pdf]");
+            Console.WriteLine();
+            Console.WriteLine("PARAMÈTRES:");
+            Console.WriteLine("  fichier.xml    Fichier XML d'entrée (requis)");
+            Console.WriteLine("  fichier.xsl    Fichier XSL de transformation (requis)");
+            Console.WriteLine("  sortie.pdf     Fichier PDF de sortie (optionnel)");
+            Console.WriteLine();
+            Console.WriteLine("EXEMPLES:");
+            Console.WriteLine("  XmlToPdfConverter.CLI.exe document.xml style.xsl");
+            Console.WriteLine("  XmlToPdfConverter.CLI.exe document.xml style.xsl rapport.pdf");
+            Console.WriteLine();
+            Console.WriteLine("OPTIONS:");
+            Console.WriteLine("  --debug        Afficher les détails de débogage");
+        }
     }
 }
