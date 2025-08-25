@@ -106,6 +106,11 @@ namespace XmlToPdfConverter.Core.Interfaces
                         _logger?.Log($"✓ Processus {processId} terminé", LogLevel.Debug);
                     }
                 }
+                catch (ArgumentException)
+                {
+                    // Le processus n'existe plus, c'est normal
+                    _logger?.Log($"✓ Processus {processId} s'est terminé normalement", LogLevel.Debug);
+                }
                 catch (Exception ex)
                 {
                     _logger?.Log($"⚠ Erreur arrêt processus {processId}: {ex.Message}", LogLevel.Warning);
