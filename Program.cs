@@ -1,7 +1,5 @@
 ﻿using System;
 using System.IO;
-using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using XmlToPdfConverter.Core.Configuration;
 using XmlToPdfConverter.Core.Interfaces;
@@ -140,7 +138,7 @@ namespace XmlToPdfConverter.CLI
                 Console.WriteLine("✅ Conversion terminée avec succès !");
                 Console.WriteLine($"   Fichier PDF: {result.OutputPath}");
                 Console.WriteLine($"   Taille: {result.FileSizeBytes:N0} octets");
-                Console.WriteLine($"   Durée: {result.Duration.TotalSeconds:F1} secondes");
+                Console.WriteLine($"   Durée: {FormatDuration(result.Duration)}");
                 return 0;
             }
             else
@@ -162,6 +160,15 @@ namespace XmlToPdfConverter.CLI
             {
                 Console.WriteLine($"⚠ Erreur lors du nettoyage: {ex.Message}");
             }
+        }
+        private static string FormatDuration(TimeSpan duration)
+        {
+            if (duration.TotalMinutes < 1)
+                return $"{duration.Seconds}s";
+            else if (duration.TotalHours < 1)
+                return $"{duration.Minutes}min {duration.Seconds}s";
+            else
+                return $"{duration.Hours}h {duration.Minutes}min {duration.Seconds}s";
         }
 
         private static void ShowUsage()

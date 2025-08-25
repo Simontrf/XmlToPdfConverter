@@ -2,7 +2,6 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
-using System.Threading;
 using System.Windows.Forms;
 using XmlToPdfConverter.Core.Configuration;
 using XmlToPdfConverter.Core.Interfaces;
@@ -416,7 +415,7 @@ namespace XmlToPdfConverter.GUI
 
                 if (conversionResult.Success)
                 {
-                    LogMessage($"✅ Conversion réussie en {conversionResult.Duration.TotalMilliseconds}ms!");
+                    LogMessage($"✅ Conversion réussie en {FormatDuration(conversionResult.Duration)}!");
 
                     if (chkOpenResult.Checked)
                     {
@@ -430,7 +429,7 @@ namespace XmlToPdfConverter.GUI
                         }
                     }
 
-                    MessageBox.Show($"Conversion réussie!\nTaille: {conversionResult.FileSizeBytes} octets\nDurée: {conversionResult.Duration.TotalMilliseconds}ms",
+                    MessageBox.Show($"Conversion réussie!\nTaille: {conversionResult.FileSizeBytes} octets\nDurée: {FormatDuration(conversionResult.Duration)}",
                                    "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
@@ -438,7 +437,7 @@ namespace XmlToPdfConverter.GUI
                     LogMessage($"❌ Conversion échouée: {conversionResult.ErrorMessage}");
                     MessageBox.Show($"Conversion échouée: {conversionResult.ErrorMessage}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
-            }            
+            }
             finally
             {
                 btnConvert.Text = "Convertir en PDF";
@@ -483,6 +482,15 @@ namespace XmlToPdfConverter.GUI
             {
                 LogMessage($"❌ Erreur test architecture: {ex.Message}");
             }
+        }
+        private static string FormatDuration(TimeSpan duration)
+        {
+            if (duration.TotalMinutes < 1)
+                return $"{duration.Seconds}s";
+            else if (duration.TotalHours < 1)
+                return $"{duration.Minutes}min {duration.Seconds}s";
+            else
+                return $"{duration.Hours}h {duration.Minutes}min {duration.Seconds}s";
         }
     }
 }

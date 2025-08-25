@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
-using System.Threading;
 using System.Threading.Tasks;
 using XmlToPdfConverter.Core.Configuration;
 using XmlToPdfConverter.Core.Engine;
@@ -84,13 +83,13 @@ namespace XmlToPdfConverter.Core.Services
                     result.FileSizeBytes = fileInfo.Length;
                     result.Duration = stopwatch.Elapsed;
 
-                    _logger.Log($"✅ Conversion réussie en {stopwatch.ElapsedMilliseconds}ms ({fileInfo.Length} octets)", LogLevel.Info);
+                    _logger.Log($"✅ Conversion réussie en {FormatDuration(stopwatch.Elapsed)} ({fileInfo.Length} octets)", LogLevel.Info);
                 }
                 else
                 {
                     result.ErrorMessage = "Chrome n'a pas généré le fichier PDF";
                 }
-            }            
+            }
             catch (Exception ex)
             {
                 result.ErrorMessage = ex.Message;
@@ -171,7 +170,7 @@ namespace XmlToPdfConverter.Core.Services
                                 Elapsed = totalStopwatch.Elapsed
                             });
 
-                            _logger.Log($"⏳ Chrome en cours... ({elapsed.Hours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2})", LogLevel.Info);
+                            _logger.Log($"⏳ Chrome en cours... ({FormatDuration(elapsed)})", LogLevel.Info);
                         }
                     }
 
@@ -193,7 +192,7 @@ namespace XmlToPdfConverter.Core.Services
                     // Attendre la création du fichier PDF
                     return await WaitForPdfCreationAsync(outputPath, progress, totalStopwatch);
                 }
-            }            
+            }
             catch (Exception ex)
             {
                 _logger.Log($"💥 Erreur lors de l'exécution Chrome: {ex.Message}", LogLevel.Error);
@@ -249,7 +248,7 @@ namespace XmlToPdfConverter.Core.Services
                     progress?.Report(new ConversionProgress
                     {
                         Percentage = progressPercent,
-                        CurrentStep = $"Attente PDF... ({waitStopwatch.Elapsed.Minutes:D2}:{waitStopwatch.Elapsed.Seconds:D2})",
+                        CurrentStep = $"Attente PDF... ({FormatDuration(waitStopwatch.Elapsed)})",
                         Elapsed = totalStopwatch.Elapsed
                     });
                 }
@@ -301,6 +300,15 @@ namespace XmlToPdfConverter.Core.Services
             Cleanup();
             _resourceManager?.Dispose();
             _chromeConfig?.Dispose();
+        }
+        private static string FormatDuration(TimeSpan duration)
+        {
+            if (duration.TotalMinutes < 1)
+                return $"{duration.Seconds}s";
+            else if (duration.TotalHours < 1)
+                return $"{duration.Minutes}min {duration.Seconds}s";
+            else
+                return $"{duration.Hours}h {duration.Minutes}min {duration.Seconds}s";
         }
     }
 }
