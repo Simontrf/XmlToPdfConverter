@@ -47,26 +47,11 @@ namespace XmlToPdfConverter.Core.Services
                 {
                     result.ErrorMessage = "Validation des entrées échouée";
                     return result;
-                }
-
-                progress?.Report(new ConversionProgress
-                {
-                    Percentage = 5,
-                    CurrentStep = "Prétraitement XML...",
-                    Elapsed = stopwatch.Elapsed
-                });
+                }                
 
                 // Prétraitement XML
                 string preprocessedXml = _preprocessor.Preprocess(xmlPath, xslPath, _logger);
-                _resourceManager.RegisterTemporaryFile(preprocessedXml);
-
-
-                progress?.Report(new ConversionProgress
-                {
-                    Percentage = 15,
-                    CurrentStep = "Préparation de Chrome...",
-                    Elapsed = stopwatch.Elapsed
-                });
+                _resourceManager.RegisterTemporaryFile(preprocessedXml);                
 
                 // Conversion Chrome
                 bool success = await ConvertWithChromeAsync(
@@ -100,14 +85,16 @@ namespace XmlToPdfConverter.Core.Services
                 stopwatch.Stop();
                 result.Duration = stopwatch.Elapsed;
 
-                progress?.Report(new ConversionProgress
+                // Nettoyer les fichiers temporaires
+                try
                 {
-                    Percentage = 100,
-                    CurrentStep = result.Success ? "Conversion terminée !" : "Conversion échouée",
-                    Elapsed = stopwatch.Elapsed
-                });
+                    _resourceManager.CleanupAll();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Log($"⚠ Erreur nettoyage fichiers temporaires: {ex.Message}", LogLevel.Warning);
+                }                
             }
-
             return result;
         }
 
@@ -162,14 +149,7 @@ namespace XmlToPdfConverter.Core.Services
                         {
                             lastProgressReport = DateTime.Now;
                             var elapsed = progressStopwatch.Elapsed;
-
-                            progress?.Report(new ConversionProgress
-                            {
-                                Percentage = Math.Min(70, 25 + (int)(elapsed.TotalMinutes * 2)),
-                                CurrentStep = $"Chrome en cours... ({elapsed.Hours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2})",
-                                Elapsed = totalStopwatch.Elapsed
-                            });
-
+                           
                             _logger.Log($"⏳ Chrome en cours... ({FormatDuration(elapsed)})", LogLevel.Info);
                         }
                     }

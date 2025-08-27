@@ -12,13 +12,7 @@ namespace XmlToPdfConverter.GUI
 {
     public partial class MainForm : Form
     {
-
-        private string xmlFilePath = "";
-        private string xslFilePath = "";
-        private string outputDirectoryPath = "";
-        private string chromePath = "";
-        private string basePath = "";
-        private string chromeProfile = ""; // Persistant
+        
         private readonly ChromeConversionService _conversionService;
         private readonly AppConfiguration _appConfig;
         private readonly IResourceManager _resourceManager;
@@ -40,13 +34,12 @@ namespace XmlToPdfConverter.GUI
             InitializeComponent();
 
             _appConfig = new AppConfiguration();
-            _resourceManager = new ResourceManager(new GuiLogger(rtbLog));
 
             var logger = new GuiLogger(rtbLog);
+            _resourceManager = new ResourceManager(logger);
             _conversionService = new ChromeConversionService(logger, _appConfig, _resourceManager);
 
             CheckDependencies();
-            TestNewArchitecture();
         }
 
         private void InitializeComponent()
@@ -280,12 +273,11 @@ namespace XmlToPdfConverter.GUI
                 if (ofd.ShowDialog() == DialogResult.OK)
                 {
                     txtXmlFile.Text = ofd.FileName;
-                    xmlFilePath = ofd.FileName;
 
                     if (string.IsNullOrEmpty(txtOutputDir.Text))
                     {
                         txtOutputDir.Text = Path.GetDirectoryName(ofd.FileName);
-                        outputDirectoryPath = Path.GetDirectoryName(ofd.FileName);
+                        //outputDirectoryPath = Path.GetDirectoryName(ofd.FileName);
                     }
                 }
             }
@@ -301,12 +293,11 @@ namespace XmlToPdfConverter.GUI
                 if (ofd.ShowDialog() == DialogResult.OK)
                 {
                     txtXslFile.Text = ofd.FileName;
-                    xslFilePath = ofd.FileName;
 
                     if (string.IsNullOrEmpty(txtOutputDir.Text))
                     {
                         txtOutputDir.Text = Path.GetDirectoryName(ofd.FileName);
-                        outputDirectoryPath = Path.GetDirectoryName(ofd.FileName);
+                        //outputDirectoryPath = Path.GetDirectoryName(ofd.FileName);
                     }
                 }
             }
@@ -329,8 +320,7 @@ namespace XmlToPdfConverter.GUI
 
                 if (sfd.ShowDialog() == DialogResult.OK)
                 {
-                    txtOutputDir.Text = sfd.FileName; // Maintenant c'est le chemin complet
-                    outputDirectoryPath = sfd.FileName;
+                    txtOutputDir.Text = sfd.FileName;
                 }
             }
         }
@@ -406,12 +396,13 @@ namespace XmlToPdfConverter.GUI
 
             try
             {
-                var progress = new Progress<ConversionProgress>(UpdateProgress);
 
                 var conversionResult = await _conversionService.ConvertAsync(
                     txtXmlFile.Text,
                     txtXslFile.Text,
-                    txtOutputDir.Text);
+                    txtOutputDir.Text
+                    //progress
+                    );
 
                 if (conversionResult.Success)
                 {
@@ -445,19 +436,7 @@ namespace XmlToPdfConverter.GUI
                 progressBar.MarqueeAnimationSpeed = 0;
 
             }
-        }
-
-        private void UpdateProgress(ConversionProgress progress)
-        {
-            if (InvokeRequired)
-            {
-                Invoke(new Action<ConversionProgress>(UpdateProgress), progress);
-                return;
-            }
-
-            // Optionnel : mettre à jour une barre de progression numérique
-            LogMessage($"[{progress.Percentage}%] {progress.CurrentStep} (Temps écoulé: {progress.Elapsed.TotalMinutes:F1}min)");
-        }
+        }        
 
         private void SetProgressBarActive(bool active)
         {
@@ -467,22 +446,7 @@ namespace XmlToPdfConverter.GUI
                 return;
             }
             progressBar.MarqueeAnimationSpeed = active ? 30 : 0;
-        }
-        private void TestNewArchitecture()
-        {
-            try
-            {
-                LogMessage("🔧 Test de la nouvelle architecture...");
-                LogMessage($"✓ Service de conversion disponible: {_conversionService.IsAvailable}");
-                LogMessage($"✓ Configuration chargée: {_appConfig != null}");
-                LogMessage($"✓ Resource Manager initialisé: {_resourceManager != null}");
-                LogMessage("✅ Architecture validée");
-            }
-            catch (Exception ex)
-            {
-                LogMessage($"❌ Erreur test architecture: {ex.Message}");
-            }
-        }
+        }        
         private static string FormatDuration(TimeSpan duration)
         {
             if (duration.TotalMinutes < 1)
