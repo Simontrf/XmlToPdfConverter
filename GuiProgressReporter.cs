@@ -69,20 +69,37 @@ namespace XmlToPdfConverter.GUI
                 if (File.Exists(xmlPath))
                 {
                     var xmlInfo = new FileInfo(xmlPath);
-                    complexity += xmlInfo.Length / 1000;
-
+                    complexity += xmlInfo.Length / 1000; // Base XML
                 }
 
                 if (File.Exists(xslPath))
                 {
                     var xslInfo = new FileInfo(xslPath);
-                    complexity += xslInfo.Length / 100;
+                    string xslContent = File.ReadAllText(xslPath);
+
+                    // Facteur de complexité XSL basé sur le contenu
+                    int xslComplexity = 1;
+
+                    // Templates multiples augmentent la complexité
+                    int templateCount = System.Text.RegularExpressions.Regex.Matches(xslContent, @"<xsl:template").Count;
+                    if (templateCount > 10) xslComplexity += 2;
+                    else if (templateCount > 5) xslComplexity += 1;
+
+                    // Boucles et conditions
+                    int loopCount = System.Text.RegularExpressions.Regex.Matches(xslContent, @"<xsl:for-each").Count;
+                    int ifCount = System.Text.RegularExpressions.Regex.Matches(xslContent, @"<xsl:if").Count;
+                    xslComplexity += (loopCount + ifCount) / 3;
+
+                    // CSS embarqué augmente le temps de rendu
+                    if (xslContent.Contains("<style>") || xslContent.Contains("css")) xslComplexity += 1;
+
+                    complexity += (xslInfo.Length / 100) * xslComplexity;
                 }
             }
             catch (Exception ex)
             {
                 _logger?.Log($"Erreur calcul complexité: {ex.Message}", LogLevel.Warning);
-                complexity = 50000;
+                complexity = 1000; // Valeur par défaut plus réaliste
             }
 
             return Math.Max(complexity, 10000);
@@ -92,40 +109,53 @@ namespace XmlToPdfConverter.GUI
         {
             try
             {
-                double estimatedSeconds = 20; // Base réaliste
+                double estimatedSeconds = 15; // Base plus réaliste pour XML+XSL
 
                 if (File.Exists(_xmlPath))
                 {
                     var xmlInfo = new FileInfo(_xmlPath);
                     double xmlMB = xmlInfo.Length / (1024.0 * 1024.0);
 
+                    // Estimation basée sur la taille XML
                     if (xmlMB < 1)
-                    {
-                        estimatedSeconds = 10 + (xmlMB * 15);
-                    }
-                    else if (xmlMB < 10)
-                    {
-                        estimatedSeconds = 15 + (xmlMB * 8);
-                    }
-                    else if (xmlMB < 50)
-                    {
-                        estimatedSeconds = 30 + (xmlMB * 3);
-                    }
+                        estimatedSeconds = 8 + (xmlMB * 12);
+                    else if (xmlMB < 5)
+                        estimatedSeconds = 12 + (xmlMB * 6);
+                    else if (xmlMB < 20)
+                        estimatedSeconds = 20 + (xmlMB * 2);
                     else
-                    {
-                        estimatedSeconds = 60 + (xmlMB * 2);
-                    }
-
-                    // ✅ SUPPRIMER: Le log debug répétitif
-                    // _logger?.Log($"📊 Estimation: {xmlMB:F1}MB XML → {estimatedSeconds:F0}s", LogLevel.Debug);
+                        estimatedSeconds = 30 + (xmlMB * 1.5);
                 }
 
-                return TimeSpan.FromSeconds(Math.Max(10, Math.Min(900, estimatedSeconds)));
+                // Facteur XSL
+                if (File.Exists(_xslPath))
+                {
+                    var xslInfo = new FileInfo(_xslPath);
+                    string xslContent = File.ReadAllText(_xslPath);
+
+                    double xslFactor = 1.0;
+
+                    // Complexité basée sur le contenu XSL
+                    int templates = System.Text.RegularExpressions.Regex.Matches(xslContent, @"<xsl:template").Count;
+                    int loops = System.Text.RegularExpressions.Regex.Matches(xslContent, @"<xsl:for-each").Count;
+
+                    if (templates > 20 || loops > 10) xslFactor = 1.5;
+                    else if (templates > 10 || loops > 5) xslFactor = 1.3;
+                    else if (templates > 5 || loops > 2) xslFactor = 1.2;
+
+                    // CSS/Style augmente le temps de rendu
+                    if (xslContent.Contains("<style>") || xslContent.Contains("css"))
+                        xslFactor *= 1.2;
+
+                    estimatedSeconds *= xslFactor;
+                }
+
+                return TimeSpan.FromSeconds(Math.Max(8, Math.Min(3600, estimatedSeconds)));
             }
             catch (Exception ex)
             {
                 _logger?.Log($"Erreur estimation: {ex.Message}", LogLevel.Warning);
-                return TimeSpan.FromSeconds(60);
+                return TimeSpan.FromSeconds(30);
             }
         }
 

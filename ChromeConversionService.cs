@@ -142,12 +142,12 @@ namespace XmlToPdfConverter.Core.Services
                             break;
                         }
 
-                        if ((DateTime.Now - lastProgressReport).TotalSeconds >= 30)
+                        if ((DateTime.Now - lastProgressReport).TotalSeconds >= 15)
                         {
                             lastProgressReport = DateTime.Now;
                             var elapsed = progressStopwatch.Elapsed;
 
-                            int chromeProgress = Math.Min(60, 10 + (int)(elapsed.TotalSeconds / 2));
+                            int chromeProgress = Math.Min(60, 15 + (int)(elapsed.TotalSeconds * 2));
                             progress?.Report(new ConversionProgress
                             {
                                 Percentage = chromeProgress,
@@ -185,10 +185,7 @@ namespace XmlToPdfConverter.Core.Services
             }
         }
 
-        private async Task<bool> WaitForPdfCreationAsync(
-        string pdfPath,
-        IProgress<ConversionProgress> progress,
-        Stopwatch totalStopwatch)
+        private async Task<bool> WaitForPdfCreationAsync(string pdfPath, IProgress<ConversionProgress> progress, Stopwatch totalStopwatch)
         {
             var waitStopwatch = Stopwatch.StartNew();
             var maxWaitTime = TimeSpan.FromMinutes(_appConfig.Conversion.MaxWaitTimeMinutes);
@@ -253,7 +250,7 @@ namespace XmlToPdfConverter.Core.Services
                 }
 
                 // Progress update avec estimation plus précise
-                if ((DateTime.Now - lastProgressUpdate).TotalSeconds >= 2) // ✅ MODIFIER: Plus fréquent
+                if ((DateTime.Now - lastProgressUpdate).TotalSeconds >= 5) 
                 {
                     lastProgressUpdate = DateTime.Now;
 
@@ -271,7 +268,6 @@ namespace XmlToPdfConverter.Core.Services
                         Elapsed = totalStopwatch.Elapsed
                     });
                 }
-
                 await Task.Delay(1000);
             }
 
