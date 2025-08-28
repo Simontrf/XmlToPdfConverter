@@ -28,6 +28,9 @@ namespace XmlToPdfConverter.GUI
         private Button btnBrowseOutput;
         private ProgressBar progressBar;
         private RichTextBox rtbLog;
+        private Label _statusLabel;
+        private GuiProgressReporter _progressReporter;
+        private DateTime _conversionStartTime;
 
         public MainForm()
         {
@@ -230,6 +233,20 @@ namespace XmlToPdfConverter.GUI
             mainPanel.Controls.Add(progressBar);
             yPos += 40;
 
+            Label lblStatus = new Label
+            {
+                Text = "Prêt à convertir",
+                Location = new Point(140, yPos - 5),
+                Size = new Size(470, 25),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Font = new Font("Segoe UI", 9F),
+                ForeColor = Color.DarkBlue,
+                AutoEllipsis = true
+            };
+            mainPanel.Controls.Add(lblStatus);
+
+            _statusLabel = lblStatus;
+
             // Zone de log
             Label logLabel = new Label
             {
@@ -394,18 +411,50 @@ namespace XmlToPdfConverter.GUI
         {
             if (!ValidateInputs()) return;
 
+            // Désactiver le bouton et préparer l'interface
+            btnConvert.Enabled = false;
+            btnConvert.Text = "Conversion en cours...";
+            btnConvert.BackColor = Color.Orange;
+
+            // Créer le système de progression adaptatif
+            _progressReporter = new GuiProgressReporter(progressBar, _statusLabel,
+                new GuiLogger(rtbLog), txtXmlFile.Text, txtXslFile.Text);
+
+            // Afficher l'estimation de durée
+            var estimatedDuration = _progressReporter.GetEstimatedDuration();
+            LogMessage($"🔄 Début de conversion (durée estimée: {FormatDuration(estimatedDuration)})");
+
+            // Démarrer en mode marquee pour l'initialisation
+            _progressReporter.SetMarqueeMode(true);
+            _conversionStartTime = DateTime.Now;
+
             try
             {
+                // Créer le progress reporter pour le service
+                var progress = new Progress<ConversionProgress>(p =>
+                {
+                    // Adaptation intelligente avec lissage temporel
+                    int adaptedPercent = CalculateSmartProgress(p.Percentage, p.Elapsed, estimatedDuration);
+
+                    // Enrichir le message avec des détails contextuels
+                    string enrichedMessage = EnrichProgressMessage(p.CurrentStep, p.Percentage, p.Elapsed);
+
+                    _progressReporter.Report(adaptedPercent, enrichedMessage);
+                });
+
+                // Ajouter un feedback de démarrage
+                _progressReporter.Report(0, "Initialisation de la conversion...");
 
                 var conversionResult = await _conversionService.ConvertAsync(
                     txtXmlFile.Text,
                     txtXslFile.Text,
-                    txtOutputDir.Text
-                    //progress
-                    );
+                    txtOutputDir.Text,
+                    progress
+                );
 
                 if (conversionResult.Success)
                 {
+                    _progressReporter.Complete();
                     LogMessage($"✅ Conversion réussie en {FormatDuration(conversionResult.Duration)}!");
 
                     if (chkOpenResult.Checked)
@@ -420,33 +469,111 @@ namespace XmlToPdfConverter.GUI
                         }
                     }
 
-                    MessageBox.Show($"Conversion réussie!\nTaille: {conversionResult.FileSizeBytes} octets\nDurée: {FormatDuration(conversionResult.Duration)}",
+                    MessageBox.Show($"Conversion réussie!\nTaille: {conversionResult.FileSizeBytes:N0} octets\nDurée: {FormatDuration(conversionResult.Duration)}",
                                    "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
                 {
+                    _progressReporter.Reset();
                     LogMessage($"❌ Conversion échouée: {conversionResult.ErrorMessage}");
                     MessageBox.Show($"Conversion échouée: {conversionResult.ErrorMessage}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
+            catch (TimeoutException)
+            {
+                _progressReporter?.Reset();
+                LogMessage("⏰ Timeout: La conversion a pris trop de temps");
+                MessageBox.Show("La conversion a pris trop de temps et a été annulée.\nVérifiez la taille et la complexité de vos fichiers.",
+                               "Timeout", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (Exception ex)
+            {
+                _progressReporter?.Reset();
+                LogMessage($"💥 Erreur critique: {ex.Message}");
+                MessageBox.Show($"Erreur: {ex.Message}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
             finally
             {
+                // Restaurer l'interface
+                btnConvert.Enabled = true;
                 btnConvert.Text = "Convertir en PDF";
                 btnConvert.BackColor = Color.FromArgb(0, 120, 215);
-                progressBar.MarqueeAnimationSpeed = 0;
 
+                // Nettoyer le progress reporter
+                _progressReporter = null;
             }
-        }        
+        }
 
-        private void SetProgressBarActive(bool active)
+        // Méthode pour calculer le pourcentage adapté basé sur l'estimation
+        private int CalculateAdaptedProgress(int reportedPercent, TimeSpan elapsed, TimeSpan estimated)
         {
-            if (progressBar.InvokeRequired)
+            // Si on a une estimation fiable
+            if (estimated.TotalSeconds > 0)
             {
-                progressBar.Invoke(new Action<bool>(SetProgressBarActive), active);
-                return;
+                // Progression basée sur le temps écoulé vs estimé
+                double timeProgress = Math.Min(95, (elapsed.TotalSeconds / estimated.TotalSeconds) * 100);
+
+                // Combiner avec le pourcentage reporté (donner plus de poids au temps en début)
+                double elapsedRatio = Math.Min(1, elapsed.TotalSeconds / estimated.TotalSeconds);
+
+                if (elapsedRatio < 0.5) // Première moitié: plus de poids au temps
+                {
+                    return (int)(timeProgress * 0.7 + reportedPercent * 0.3);
+                }
+                else // Seconde moitié: plus de poids au rapport réel
+                {
+                    return (int)(timeProgress * 0.3 + reportedPercent * 0.7);
+                }
             }
-            progressBar.MarqueeAnimationSpeed = active ? 30 : 0;
-        }        
+
+            // Fallback: utiliser le pourcentage reporté
+            return reportedPercent;
+        }
+        private int CalculateSmartProgress(int reportedPercent, TimeSpan elapsed, TimeSpan estimated)
+        {
+            // Version améliorée avec détection de ralentissement/accélération
+            if (estimated.TotalSeconds <= 0) return reportedPercent;
+
+            double timeRatio = elapsed.TotalSeconds / estimated.TotalSeconds;
+            double expectedPercent = Math.Min(95, timeRatio * 100);
+
+            // Détection de phases de conversion
+            if (reportedPercent <= 10) // Phase d'initialisation
+            {
+                return Math.Max(reportedPercent, (int)(timeRatio * 15));
+            }
+            else if (reportedPercent <= 75) // Phase de traitement principal
+            {
+                // Moyenner intelligemment temps et rapport réel
+                double weight = Math.Min(1.0, elapsed.TotalSeconds / 30.0); // Plus de poids au temps après 30s
+                return (int)(expectedPercent * weight + reportedPercent * (1 - weight));
+            }
+            else // Phase de finalisation
+            {
+                // Privilégier le rapport réel en fin de conversion
+                return Math.Max(reportedPercent, (int)expectedPercent);
+            }
+        }
+
+        private string EnrichProgressMessage(string baseMessage, int percent, TimeSpan elapsed)
+        {
+            // Ajouter des détails contextuels selon la phase
+            string phaseInfo = "";
+
+            if (percent <= 10)
+                phaseInfo = "Démarrage";
+            else if (percent <= 30)
+                phaseInfo = "Préparation";
+            else if (percent <= 70)
+                phaseInfo = "Traitement";
+            else if (percent <= 90)
+                phaseInfo = "Génération PDF";
+            else
+                phaseInfo = "Finalisation";
+
+            return $"{phaseInfo}: {baseMessage}";
+        }
+
         private static string FormatDuration(TimeSpan duration)
         {
             if (duration.TotalMinutes < 1)

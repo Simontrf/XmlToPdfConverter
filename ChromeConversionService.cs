@@ -181,9 +181,9 @@ namespace XmlToPdfConverter.Core.Services
         }
 
         private async Task<bool> WaitForPdfCreationAsync(
-            string pdfPath,
-            IProgress<ConversionProgress> progress,
-            Stopwatch totalStopwatch)
+    string pdfPath,
+    IProgress<ConversionProgress> progress,
+    Stopwatch totalStopwatch)
         {
             var waitStopwatch = Stopwatch.StartNew();
             var maxWaitTime = TimeSpan.FromMinutes(_appConfig.Conversion.MaxWaitTimeMinutes);
@@ -193,6 +193,10 @@ namespace XmlToPdfConverter.Core.Services
             int stableCount = 0;
             var lastProgressUpdate = DateTime.MinValue;
 
+            // ✅ AJOUTER: Variables pour détecter la fin réelle
+            bool pdfDetected = false;
+            DateTime? firstDetectionTime = null;
+
             while (waitStopwatch.Elapsed < maxWaitTime)
             {
                 if (File.Exists(pdfPath))
@@ -201,34 +205,74 @@ namespace XmlToPdfConverter.Core.Services
 
                     if (currentSize > 0)
                     {
+                        // ✅ MODIFIER: Marquer la première détection
+                        if (!pdfDetected)
+                        {
+                            pdfDetected = true;
+                            firstDetectionTime = DateTime.Now;
+                            _logger.Log($"🔍 PDF détecté ({currentSize} octets)", LogLevel.Debug);
+                        }
+
                         if (currentSize == lastSize)
                         {
                             stableCount++;
-                            if (stableCount >= _appConfig.Conversion.FileStabilityCheckSeconds)
+
+                            // ✅ MODIFIER: Condition de stabilité plus flexible
+                            int requiredStableChecks = Math.Max(2, _appConfig.Conversion.FileStabilityCheckSeconds);
+
+                            if (stableCount >= requiredStableChecks)
                             {
-                                _logger.Log($"✓ PDF stabilisé ({currentSize} octets)", LogLevel.Debug);
-                                return true;
+                                _logger.Log($"✅ PDF stabilisé après {stableCount}s ({currentSize} octets)", LogLevel.Info);
+
+                                // ✅ AJOUTER: Rapport final avant validation
+                                progress?.Report(new ConversionProgress
+                                {
+                                    Percentage = 95,
+                                    CurrentStep = "PDF généré, validation finale...",
+                                    Elapsed = totalStopwatch.Elapsed
+                                });
+
+                                // ✅ AJOUTER: Validation finale du fichier
+                                return await ValidatePdfFile(pdfPath, currentSize);
                             }
                         }
                         else
                         {
                             stableCount = 0;
                             lastSize = currentSize;
-                            _logger.Log($"📄 PDF en croissance... ({currentSize} octets)", LogLevel.Debug);
+                            _logger.Log($"📈 PDF en croissance... ({currentSize} octets, +{currentSize - (lastSize > 0 ? lastSize : 0)})", LogLevel.Debug);
                         }
                     }
+                    else
+                    {
+                        // ✅ AJOUTER: Gérer les fichiers de taille 0
+                        _logger.Log("⚠ PDF détecté mais vide, attente...", LogLevel.Debug);
+                    }
+                }
+                else if (pdfDetected)
+                {
+                    // ✅ AJOUTER: Si le PDF était détecté mais n'existe plus
+                    _logger.Log("⚠ PDF disparu, attente de régénération...", LogLevel.Warning);
+                    pdfDetected = false;
+                    firstDetectionTime = null;
                 }
 
-                // Progress update
-                if ((DateTime.Now - lastProgressUpdate).TotalSeconds >= 5)
+                // Progress update avec estimation plus précise
+                if ((DateTime.Now - lastProgressUpdate).TotalSeconds >= 2) // ✅ MODIFIER: Plus fréquent
                 {
                     lastProgressUpdate = DateTime.Now;
-                    var progressPercent = 75 + Math.Min(20, (int)((waitStopwatch.Elapsed.TotalMinutes / maxWaitTime.TotalMinutes) * 20));
+
+                    // ✅ MODIFIER: Progression plus intelligente
+                    int progressPercent = CalculateWaitProgress(waitStopwatch.Elapsed, maxWaitTime, pdfDetected, currentSize: lastSize);
+
+                    string statusMessage = pdfDetected && lastSize > 0
+                        ? $"Stabilisation PDF... ({lastSize:N0} octets, {stableCount}/{_appConfig.Conversion.FileStabilityCheckSeconds}s)"
+                        : "Attente génération PDF...";
 
                     progress?.Report(new ConversionProgress
                     {
                         Percentage = progressPercent,
-                        CurrentStep = $"Attente PDF... ({FormatDuration(waitStopwatch.Elapsed)})",
+                        CurrentStep = statusMessage,
                         Elapsed = totalStopwatch.Elapsed
                     });
                 }
@@ -236,8 +280,67 @@ namespace XmlToPdfConverter.Core.Services
                 await Task.Delay(1000);
             }
 
-            _logger.Log($"❌ Timeout: PDF non créé après {maxWaitTime.TotalMinutes} minutes", LogLevel.Error);
+            _logger.Log($"❌ Timeout: PDF non stabilisé après {maxWaitTime.TotalMinutes} minutes", LogLevel.Error);
             return false;
+        }
+
+        // ✅ AJOUTER: Nouvelle méthode pour calculer la progression d'attente
+        private int CalculateWaitProgress(TimeSpan elapsed, TimeSpan maxWait, bool pdfDetected, long currentSize)
+        {
+            // Base: progression temporelle
+            double timeProgress = (elapsed.TotalSeconds / maxWait.TotalSeconds) * 15; // Maximum 15% pour le temps
+
+            // Bonus si PDF détecté
+            int detectionBonus = pdfDetected ? 10 : 0;
+
+            // Bonus selon la taille (PDF en croissance)
+            int sizeBonus = currentSize > 1024 ? 5 : 0; // 5% si plus de 1KB
+
+            return 75 + (int)timeProgress + detectionBonus + sizeBonus; // Base 75% + bonus
+        }
+
+        // ✅ AJOUTER: Nouvelle méthode de validation finale
+        private async Task<bool> ValidatePdfFile(string pdfPath, long expectedSize)
+        {
+            try
+            {
+                // Attendre un peu pour s'assurer que le fichier est complètement écrit
+                await Task.Delay(500);
+
+                if (!File.Exists(pdfPath))
+                {
+                    _logger.Log("❌ PDF disparu lors de la validation finale", LogLevel.Error);
+                    return false;
+                }
+
+                var finalInfo = new FileInfo(pdfPath);
+
+                // Vérification de taille minimale (un PDF valide fait au moins quelques KB)
+                if (finalInfo.Length < 1024)
+                {
+                    _logger.Log($"❌ PDF trop petit ({finalInfo.Length} octets), probablement corrompu", LogLevel.Error);
+                    return false;
+                }
+
+                // Vérification que la taille n'a pas changé (stabilité confirmée)
+                if (finalInfo.Length != expectedSize)
+                {
+                    _logger.Log($"⚠ Taille PDF changée pendant validation ({expectedSize} → {finalInfo.Length})", LogLevel.Warning);
+                    // On accepte quand même si la différence est minime
+                    if (Math.Abs(finalInfo.Length - expectedSize) > 1024)
+                    {
+                        return false;
+                    }
+                }
+
+                _logger.Log($"✅ PDF validé: {finalInfo.Length:N0} octets", LogLevel.Info);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.Log($"❌ Erreur validation PDF: {ex.Message}", LogLevel.Error);
+                return false;
+            }
         }
 
         private bool ValidateInputs(string xmlPath, string xslPath, string outputPath)
