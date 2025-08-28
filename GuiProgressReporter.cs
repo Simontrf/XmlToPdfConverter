@@ -8,6 +8,8 @@ namespace XmlToPdfConverter.GUI
 {
     public class GuiProgressReporter : IProgressReporter
     {
+        private readonly string _xmlPath;
+        private readonly string _xslPath;
         private readonly ProgressBar _progressBar;
         private readonly Label _statusLabel;
         private readonly ILogger _logger;
@@ -25,11 +27,16 @@ namespace XmlToPdfConverter.GUI
         private int _currentDisplayPercent = 0;
 
         public GuiProgressReporter(ProgressBar progressBar, Label statusLabel, ILogger logger,
-                                 string xmlPath, string xslPath)
+                         string xmlPath, string xslPath)
         {
             _progressBar = progressBar;
             _statusLabel = statusLabel;
             _logger = logger;
+
+            // ✅ AJOUTER: Stocker les chemins pour l'estimation
+            _xmlPath = xmlPath;
+            _xslPath = xslPath;
+
             _estimatedComplexity = CalculateComplexity(xmlPath, xslPath);
             _startTime = DateTime.Now;
             _lastUpdateTime = DateTime.Now;
@@ -62,40 +69,64 @@ namespace XmlToPdfConverter.GUI
                 if (File.Exists(xmlPath))
                 {
                     var xmlInfo = new FileInfo(xmlPath);
-                    complexity += xmlInfo.Length; // Taille du XML
+                    complexity += xmlInfo.Length / 1000;
 
-                    // Bonus de complexité basé sur le contenu estimé
-                    if (xmlInfo.Length > 1024 * 1024) // > 1MB
-                        complexity += (xmlInfo.Length / 4); // Fichier volumineux = plus complexe
                 }
 
                 if (File.Exists(xslPath))
                 {
                     var xslInfo = new FileInfo(xslPath);
-                    // XSL plus complexe = transformation plus longue
-                    complexity += xslInfo.Length * 2;
+                    complexity += xslInfo.Length / 100;
                 }
             }
             catch (Exception ex)
             {
                 _logger?.Log($"Erreur calcul complexité: {ex.Message}", LogLevel.Warning);
-                complexity = 100000; // Valeur par défaut
+                complexity = 50000;
             }
 
-            return Math.Max(complexity, 50000); // Minimum de complexité
+            return Math.Max(complexity, 10000);
         }
 
         public TimeSpan GetEstimatedDuration()
         {
-            // Estimation basée sur la complexité calculée
-            double estimatedSeconds = _baseTimeSeconds +
-                                    (_estimatedComplexity * _xmlSizeFactor) +
-                                    (_estimatedComplexity * _xslComplexityFactor);
+            try
+            {
+                double estimatedSeconds = 20; // Base réaliste
 
-            // Limiter entre 5 secondes et 5 minutes
-            estimatedSeconds = Math.Max(5, Math.Min(3600, estimatedSeconds));
+                if (File.Exists(_xmlPath))
+                {
+                    var xmlInfo = new FileInfo(_xmlPath);
+                    double xmlMB = xmlInfo.Length / (1024.0 * 1024.0);
 
-            return TimeSpan.FromSeconds(estimatedSeconds);
+                    if (xmlMB < 1)
+                    {
+                        estimatedSeconds = 10 + (xmlMB * 15);
+                    }
+                    else if (xmlMB < 10)
+                    {
+                        estimatedSeconds = 15 + (xmlMB * 8);
+                    }
+                    else if (xmlMB < 50)
+                    {
+                        estimatedSeconds = 30 + (xmlMB * 3);
+                    }
+                    else
+                    {
+                        estimatedSeconds = 60 + (xmlMB * 2);
+                    }
+
+                    // ✅ SUPPRIMER: Le log debug répétitif
+                    // _logger?.Log($"📊 Estimation: {xmlMB:F1}MB XML → {estimatedSeconds:F0}s", LogLevel.Debug);
+                }
+
+                return TimeSpan.FromSeconds(Math.Max(10, Math.Min(900, estimatedSeconds)));
+            }
+            catch (Exception ex)
+            {
+                _logger?.Log($"Erreur estimation: {ex.Message}", LogLevel.Warning);
+                return TimeSpan.FromSeconds(60);
+            }
         }
 
         public void Report(int percent, string message)
@@ -109,6 +140,13 @@ namespace XmlToPdfConverter.GUI
             try
             {
                 percent = Math.Max(0, Math.Min(100, percent));
+
+                // ✅ AJOUTER: Éviter les mises à jour trop fréquentes
+                var now = DateTime.Now;
+                if ((now - _lastUpdateTime).TotalMilliseconds < 200 && percent == _lastPercent)
+                {
+                    return; // Ignorer si même pourcentage et moins de 200ms écoulées
+                }
 
                 // Animation fluide uniquement si progression significative
                 if (percent > _lastPercent + 2 || percent == 100)
@@ -137,7 +175,12 @@ namespace XmlToPdfConverter.GUI
                         _statusLabel.ForeColor = Color.DarkGreen;
                 }
 
-                _logger?.Log($"Progression: {percent}% - {message} - {timeInfo}", LogLevel.Debug);
+                // ✅ MODIFIER: Log seulement les changements significatifs
+                if (percent != _lastPercent || (now - _lastUpdateTime).TotalSeconds >= 15)
+                {
+                    _logger?.Log($"Progression: {percent}% - {message} - {timeInfo}", LogLevel.Debug);
+                }
+
                 _lastUpdateTime = DateTime.Now;
             }
             catch (Exception ex)
@@ -148,31 +191,35 @@ namespace XmlToPdfConverter.GUI
 
         private string CalculateTimeRemaining(int percent, TimeSpan elapsed)
         {
-            if (percent <= 0) return "Calcul en cours...";
+            // ✅ MODIFIER: Afficher l'estimation au lieu des calculs complexes
+            if (elapsed.TotalSeconds < 3)
+            {
+                var estimatedTotal = GetEstimatedDuration();
+                return $"Estimation: {FormatTimeSpan(estimatedTotal)}";
+            }
 
             try
             {
-                // Estimation basée sur la progression actuelle
-                double totalEstimatedSeconds = (elapsed.TotalSeconds * 100) / percent;
-                double remainingSeconds = totalEstimatedSeconds - elapsed.TotalSeconds;
-
-                // Lisser l'estimation pour éviter les variations brutales
                 var originalEstimate = GetEstimatedDuration();
-                if (percent < 20) // En début, privilégier l'estimation initiale
+                var remainingTime = originalEstimate - elapsed;
+
+                // Si on dépasse l'estimation, recalculer simplement
+                if (remainingTime.TotalSeconds <= 0 && percent > 10)
                 {
-                    remainingSeconds = originalEstimate.TotalSeconds * (1 - percent / 100.0);
+                    double totalEstimated = (elapsed.TotalSeconds * 100) / Math.Max(percent, 5);
+                    remainingTime = TimeSpan.FromSeconds(Math.Max(5, totalEstimated - elapsed.TotalSeconds));
+                }
+                else if (remainingTime.TotalSeconds <= 0)
+                {
+                    remainingTime = TimeSpan.FromSeconds(10);
                 }
 
-                remainingSeconds = Math.Max(0, remainingSeconds);
-
-                string elapsedStr = FormatTimeSpan(elapsed);
-                string remainingStr = FormatTimeSpan(TimeSpan.FromSeconds(remainingSeconds));
-
-                return $"Écoulé: {elapsedStr} | Restant: ~{remainingStr}";
+                return $"Écoulé: {FormatTimeSpan(elapsed)} | Restant: ~{FormatTimeSpan(remainingTime)}";
             }
             catch
             {
-                return $"Écoulé: {FormatTimeSpan(elapsed)}";
+                var estimatedTotal = GetEstimatedDuration();
+                return $"Écoulé: {FormatTimeSpan(elapsed)} | Estimation: {FormatTimeSpan(estimatedTotal)}";
             }
         }
 

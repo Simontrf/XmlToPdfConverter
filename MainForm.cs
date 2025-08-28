@@ -433,13 +433,10 @@ namespace XmlToPdfConverter.GUI
                 // Créer le progress reporter pour le service
                 var progress = new Progress<ConversionProgress>(p =>
                 {
-                    // Adaptation intelligente avec lissage temporel
-                    int adaptedPercent = CalculateSmartProgress(p.Percentage, p.Elapsed, estimatedDuration);
+                    var elapsed = DateTime.Now - _conversionStartTime;
+                    int simplePercent = CalculateSimpleProgress(p.Percentage, elapsed, estimatedDuration);
 
-                    // Enrichir le message avec des détails contextuels
-                    string enrichedMessage = EnrichProgressMessage(p.CurrentStep, p.Percentage, p.Elapsed);
-
-                    _progressReporter.Report(adaptedPercent, enrichedMessage);
+                    _progressReporter.Report(simplePercent, p.CurrentStep);
                 });
 
                 // Ajouter un feedback de démarrage
@@ -505,74 +502,33 @@ namespace XmlToPdfConverter.GUI
         }
 
         // Méthode pour calculer le pourcentage adapté basé sur l'estimation
-        private int CalculateAdaptedProgress(int reportedPercent, TimeSpan elapsed, TimeSpan estimated)
+        private int CalculateSimpleProgress(int reportedPercent, TimeSpan elapsed, TimeSpan estimated)
         {
-            // Si on a une estimation fiable
+            // Progression temporelle simple
+            int timeBasedPercent = 0;
             if (estimated.TotalSeconds > 0)
             {
-                // Progression basée sur le temps écoulé vs estimé
-                double timeProgress = Math.Min(95, (elapsed.TotalSeconds / estimated.TotalSeconds) * 100);
-
-                // Combiner avec le pourcentage reporté (donner plus de poids au temps en début)
-                double elapsedRatio = Math.Min(1, elapsed.TotalSeconds / estimated.TotalSeconds);
-
-                if (elapsedRatio < 0.5) // Première moitié: plus de poids au temps
-                {
-                    return (int)(timeProgress * 0.7 + reportedPercent * 0.3);
-                }
-                else // Seconde moitié: plus de poids au rapport réel
-                {
-                    return (int)(timeProgress * 0.3 + reportedPercent * 0.7);
-                }
+                timeBasedPercent = (int)((elapsed.TotalSeconds / estimated.TotalSeconds) * 90); // Max 90%
+                timeBasedPercent = Math.Min(90, timeBasedPercent);
             }
 
-            // Fallback: utiliser le pourcentage reporté
-            return reportedPercent;
-        }
-        private int CalculateSmartProgress(int reportedPercent, TimeSpan elapsed, TimeSpan estimated)
-        {
-            // Version améliorée avec détection de ralentissement/accélération
-            if (estimated.TotalSeconds <= 0) return reportedPercent;
-
-            double timeRatio = elapsed.TotalSeconds / estimated.TotalSeconds;
-            double expectedPercent = Math.Min(95, timeRatio * 100);
-
-            // Détection de phases de conversion
-            if (reportedPercent <= 10) // Phase d'initialisation
+            // ✅ LOGIQUE SIMPLE :
+            if (reportedPercent == 0) // Chrome pas encore démarré ou en préparation
             {
-                return Math.Max(reportedPercent, (int)(timeRatio * 15));
+                // Progression basée uniquement sur le temps (0-10% les 3 premières secondes)
+                return Math.Min(10, (int)(elapsed.TotalSeconds * 3));
             }
-            else if (reportedPercent <= 75) // Phase de traitement principal
+            else if (reportedPercent < 75) // Chrome en cours d'exécution
             {
-                // Moyenner intelligemment temps et rapport réel
-                double weight = Math.Min(1.0, elapsed.TotalSeconds / 30.0); // Plus de poids au temps après 30s
-                return (int)(expectedPercent * weight + reportedPercent * (1 - weight));
+                // Progression mixte : 50% temps + 50% rapport Chrome
+                return Math.Max(reportedPercent, (timeBasedPercent + reportedPercent) / 2);
             }
-            else // Phase de finalisation
+            else // Chrome terminé, attente PDF
             {
-                // Privilégier le rapport réel en fin de conversion
-                return Math.Max(reportedPercent, (int)expectedPercent);
+                // Utiliser directement le rapport de Chrome (75-100%)
+                return Math.Max(75, reportedPercent);
             }
-        }
-
-        private string EnrichProgressMessage(string baseMessage, int percent, TimeSpan elapsed)
-        {
-            // Ajouter des détails contextuels selon la phase
-            string phaseInfo = "";
-
-            if (percent <= 10)
-                phaseInfo = "Démarrage";
-            else if (percent <= 30)
-                phaseInfo = "Préparation";
-            else if (percent <= 70)
-                phaseInfo = "Traitement";
-            else if (percent <= 90)
-                phaseInfo = "Génération PDF";
-            else
-                phaseInfo = "Finalisation";
-
-            return $"{phaseInfo}: {baseMessage}";
-        }
+        }        
 
         private static string FormatDuration(TimeSpan duration)
         {

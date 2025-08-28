@@ -72,7 +72,7 @@ namespace XmlToPdfConverter.Core.Configuration
     {
         public int FileStabilityCheckSeconds { get; set; } = 2;
         public int MaxWaitTimeMinutes { get; set; } = 60;
-        public int ProgressUpdateIntervalMs { get; set; } = 300;
+        public int ProgressUpdateIntervalMs { get; set; } = 1000;
         public bool OpenResultAfterConversion { get; set; } = false;
         public bool CleanupTemporaryFiles { get; set; } = true;
         public string TempFilePrefix { get; set; } = "preprocessed_";
@@ -83,14 +83,14 @@ namespace XmlToPdfConverter.Core.Configuration
         public bool UseProgressEstimation { get; set; } = true;
         public int MinEstimatedDurationSeconds { get; set; } = 5;
         public int MaxEstimatedDurationSeconds { get; set; } = 300;
-        public double XmlSizeProgressFactor { get; set; } = 0.001;
-        public double XslComplexityFactor { get; set; } = 0.01;
+        public double XmlSizeProgressFactor { get; set; } = 0.00001;
+        public double XslComplexityFactor { get; set; } = 0.001;
     }
 
     public class LoggingSettings
     {
         public LogLevel MinimumLevel { get; set; } = LogLevel.Info;
         public bool EnableDebugLogging { get; set; } = false;
-        public int ProgressLogIntervalMinutes { get; set; } = 1;
-    }
+        public int ProgressLogIntervalMinutes { get; set; } = 1; // ✅ GARDER à 1 minute
+    }    
 }

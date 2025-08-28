@@ -67,8 +67,6 @@ namespace XmlToPdfConverter.Core.Services
                     result.OutputPath = outputPath;
                     result.FileSizeBytes = fileInfo.Length;
                     result.Duration = stopwatch.Elapsed;
-
-                    _logger.Log($"✅ Conversion réussie en {FormatDuration(stopwatch.Elapsed)} ({fileInfo.Length} octets)", LogLevel.Info);
                 }
                 else
                 {
@@ -144,12 +142,19 @@ namespace XmlToPdfConverter.Core.Services
                             break;
                         }
 
-                        // Reporter le progrès toutes les X minutes
-                        if ((DateTime.Now - lastProgressReport).TotalMinutes >= _appConfig.Logging.ProgressLogIntervalMinutes)
+                        if ((DateTime.Now - lastProgressReport).TotalSeconds >= 30)
                         {
                             lastProgressReport = DateTime.Now;
                             var elapsed = progressStopwatch.Elapsed;
-                           
+
+                            int chromeProgress = Math.Min(60, 10 + (int)(elapsed.TotalSeconds / 2));
+                            progress?.Report(new ConversionProgress
+                            {
+                                Percentage = chromeProgress,
+                                CurrentStep = "Chrome traite le document...",
+                                Elapsed = totalStopwatch.Elapsed
+                            });
+
                             _logger.Log($"⏳ Chrome en cours... ({FormatDuration(elapsed)})", LogLevel.Info);
                         }
                     }
@@ -181,9 +186,9 @@ namespace XmlToPdfConverter.Core.Services
         }
 
         private async Task<bool> WaitForPdfCreationAsync(
-    string pdfPath,
-    IProgress<ConversionProgress> progress,
-    Stopwatch totalStopwatch)
+        string pdfPath,
+        IProgress<ConversionProgress> progress,
+        Stopwatch totalStopwatch)
         {
             var waitStopwatch = Stopwatch.StartNew();
             var maxWaitTime = TimeSpan.FromMinutes(_appConfig.Conversion.MaxWaitTimeMinutes);
@@ -221,10 +226,7 @@ namespace XmlToPdfConverter.Core.Services
                             int requiredStableChecks = Math.Max(2, _appConfig.Conversion.FileStabilityCheckSeconds);
 
                             if (stableCount >= requiredStableChecks)
-                            {
-                                _logger.Log($"✅ PDF stabilisé après {stableCount}s ({currentSize} octets)", LogLevel.Info);
-
-                                // ✅ AJOUTER: Rapport final avant validation
+                            {                              
                                 progress?.Report(new ConversionProgress
                                 {
                                     Percentage = 95,
@@ -232,16 +234,9 @@ namespace XmlToPdfConverter.Core.Services
                                     Elapsed = totalStopwatch.Elapsed
                                 });
 
-                                // ✅ AJOUTER: Validation finale du fichier
                                 return await ValidatePdfFile(pdfPath, currentSize);
                             }
-                        }
-                        else
-                        {
-                            stableCount = 0;
-                            lastSize = currentSize;
-                            _logger.Log($"📈 PDF en croissance... ({currentSize} octets, +{currentSize - (lastSize > 0 ? lastSize : 0)})", LogLevel.Debug);
-                        }
+                        }                        
                     }
                     else
                     {
@@ -287,16 +282,22 @@ namespace XmlToPdfConverter.Core.Services
         // ✅ AJOUTER: Nouvelle méthode pour calculer la progression d'attente
         private int CalculateWaitProgress(TimeSpan elapsed, TimeSpan maxWait, bool pdfDetected, long currentSize)
         {
-            // Base: progression temporelle
-            double timeProgress = (elapsed.TotalSeconds / maxWait.TotalSeconds) * 15; // Maximum 15% pour le temps
+            // ✅ SIMPLIFIER: Base 75% + progression linéaire
+            int baseProgress = 75;
 
-            // Bonus si PDF détecté
-            int detectionBonus = pdfDetected ? 10 : 0;
+            if (pdfDetected)
+            {
+                baseProgress = 85; // PDF détecté = 85%
+                if (currentSize > 1024)
+                {
+                    baseProgress = 90; // PDF avec contenu = 90%
+                }
+            }
 
-            // Bonus selon la taille (PDF en croissance)
-            int sizeBonus = currentSize > 1024 ? 5 : 0; // 5% si plus de 1KB
+            // Progression temporelle simple (max 10% supplémentaires)
+            int timeProgress = (int)((elapsed.TotalSeconds / 30.0) * 10); // 10% sur 30 secondes
 
-            return 75 + (int)timeProgress + detectionBonus + sizeBonus; // Base 75% + bonus
+            return Math.Min(95, baseProgress + timeProgress);
         }
 
         // ✅ AJOUTER: Nouvelle méthode de validation finale
