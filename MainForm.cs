@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using XmlToPdfConverter.Core.Configuration;
 using XmlToPdfConverter.Core.Interfaces;
@@ -458,11 +459,25 @@ namespace XmlToPdfConverter.GUI
                     {
                         try
                         {
-                            Process.Start(new ProcessStartInfo(conversionResult.OutputPath) { UseShellExecute = true });
+                            // ✅ Attendre que le fichier soit complètement écrit
+                            await Task.Delay(1000);
+
+                            if (File.Exists(conversionResult.OutputPath))
+                            {
+                                var startInfo = new ProcessStartInfo
+                                {
+                                    FileName = conversionResult.OutputPath,
+                                    UseShellExecute = true,
+                                    Verb = "open"
+                                };
+                                Process.Start(startInfo);
+                                LogMessage($"📄 Ouverture du PDF...");
+                            }
                         }
                         catch (Exception ex)
                         {
                             LogMessage($"⚠ Impossible d'ouvrir le PDF: {ex.Message}");
+                            LogMessage($"💡 Ouvrez manuellement: {conversionResult.OutputPath}");
                         }
                     }
 

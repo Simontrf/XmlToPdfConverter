@@ -99,7 +99,7 @@ namespace XmlToPdfConverter.GUI
             catch (Exception ex)
             {
                 _logger?.Log($"Erreur calcul complexité: {ex.Message}", LogLevel.Warning);
-                complexity = 1000; // Valeur par défaut plus réaliste
+                complexity = 30000; // Valeur par défaut plus réaliste
             }
 
             return Math.Max(complexity, 10000);

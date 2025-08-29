@@ -201,9 +201,11 @@ namespace XmlToPdfConverter.Core.Services
 
             while (waitStopwatch.Elapsed < maxWaitTime)
             {
+                long currentSize = 0;
+
                 if (File.Exists(pdfPath))
                 {
-                    var currentSize = new FileInfo(pdfPath).Length;
+                    currentSize = new FileInfo(pdfPath).Length;
 
                     if (currentSize > 0)
                     {
@@ -233,7 +235,13 @@ namespace XmlToPdfConverter.Core.Services
 
                                 return await ValidatePdfFile(pdfPath, currentSize);
                             }
-                        }                        
+                        }
+                        else
+                        {
+                            stableCount = 0;
+                        }
+
+                        lastSize = currentSize; 
                     }
                     else
                     {
@@ -255,7 +263,7 @@ namespace XmlToPdfConverter.Core.Services
                     lastProgressUpdate = DateTime.Now;
 
                     // ✅ MODIFIER: Progression plus intelligente
-                    int progressPercent = CalculateWaitProgress(waitStopwatch.Elapsed, maxWaitTime, pdfDetected, currentSize: lastSize);
+                    int progressPercent = CalculateWaitProgress(waitStopwatch.Elapsed, maxWaitTime, pdfDetected, currentSize: currentSize);
 
                     string statusMessage = pdfDetected && lastSize > 0
                         ? $"Stabilisation PDF... ({lastSize:N0} octets, {stableCount}/{_appConfig.Conversion.FileStabilityCheckSeconds}s)"
