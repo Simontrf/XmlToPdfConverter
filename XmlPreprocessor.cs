@@ -17,7 +17,7 @@ namespace XmlToPdfConverter.Core.Engine
             string xslDir = Path.GetDirectoryName(Path.GetFullPath(xslInputPath));
             string xslFileName = Path.GetFileName(xslInputPath);
 
-            string relativePath;
+            /*string relativePath;
             if (xmlDir.Equals(xslDir, StringComparison.OrdinalIgnoreCase))
             {
                 relativePath = xslFileName;
@@ -25,7 +25,9 @@ namespace XmlToPdfConverter.Core.Engine
             else
             {
                 relativePath = new Uri(Path.GetFullPath(xslInputPath)).AbsoluteUri;
-            }
+            }*/
+
+            string relativePath = new Uri(Path.GetFullPath(xslInputPath)).AbsoluteUri;
 
             // SUPPRIMER toutes les références XSL existantes
             string pattern = @"<\?xml-stylesheet[^>]*\?>\s*";
