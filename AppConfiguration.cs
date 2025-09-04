@@ -4,13 +4,10 @@ namespace XmlToPdfConverter.Core.Configuration
 {
     public class AppConfiguration
     {
-        // Chrome Settings
         public ChromeSettings Chrome { get; set; } = new ChromeSettings();
 
-        // Conversion Settings
         public ConversionSettings Conversion { get; set; } = new ConversionSettings();
 
-        // Logging Settings
         public LoggingSettings Logging { get; set; } = new LoggingSettings();
     }
 
@@ -30,7 +27,6 @@ namespace XmlToPdfConverter.Core.Configuration
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
         
-                // ✅ RENDU COMPLET FORCÉ
                 "--disable-partial-raster",
                 "--disable-threaded-compositing",
                 "--disable-checker-imaging",
@@ -39,28 +35,22 @@ namespace XmlToPdfConverter.Core.Configuration
                 "--disable-renderer-backgrounding",
                 "--disable-backgrounding-occluded-windows",
         
-                // ✅ POLICES ET TEXTE
                 "--disable-font-subpixel-positioning",
                 "--enable-font-antialiasing",
                 "--force-device-scale-factor=1.0",
         
-                // ✅ TIMEOUT ÉTENDU
-                "--virtual-time-budget=30000", // 30 secondes pour le rendu
+                "--virtual-time-budget=30000",
                 "--timeout=60000",
         
-                // Mémoire
                 "--js-flags=--max-old-space-size=8192",
                 "--memory-pressure-off",
         
-                // Sécurité et permissions
                 "--disable-web-security",
                 "--allow-file-access-from-files",
                 "--allow-running-insecure-content",
         
-                // PDF et couleurs
                 "--print-backgrounds",
         
-                // Configuration
                 $"--user-data-dir=\"{profilePath}\"",
                 $"--print-to-pdf=\"{pdfPath}\"",
                 xmlUrl
@@ -91,6 +81,6 @@ namespace XmlToPdfConverter.Core.Configuration
     {
         public LogLevel MinimumLevel { get; set; } = LogLevel.Info;
         public bool EnableDebugLogging { get; set; } = false;
-        public int ProgressLogIntervalMinutes { get; set; } = 1; // ✅ GARDER à 1 minute
+        public int ProgressLogIntervalMinutes { get; set; } = 1;
     }    
 }

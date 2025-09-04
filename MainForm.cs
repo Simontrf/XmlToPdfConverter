@@ -439,7 +439,7 @@ namespace XmlToPdfConverter.GUI
 
                     _progressReporter.Report(simplePercent, p.CurrentStep);
                 });
-
+                 
                 // Ajouter un feedback de démarrage
                 _progressReporter.Report(0, "Initialisation de la conversion...");
 
