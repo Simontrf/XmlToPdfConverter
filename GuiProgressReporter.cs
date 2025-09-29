@@ -15,8 +15,7 @@ namespace XmlToPdfConverter.GUI
         private readonly ILogger _logger;
         private readonly long _estimatedComplexity;
 
-        // Coefficients d'estimation basés sur la taille des fichiers
-        private readonly double _baseTimeSeconds = 5.0; // Temps de base minimal
+        private readonly double _baseTimeSeconds = 5.0; 
         private readonly double _xmlSizeFactor = 0.001; // 1ms par KB de XML
         private readonly double _xslComplexityFactor = 0.01; // Facteur de complexité XSL
         private DateTime _startTime;
@@ -24,7 +23,7 @@ namespace XmlToPdfConverter.GUI
         private int _lastPercent = -1;
         private readonly System.Windows.Forms.Timer _smoothingTimer;
         private int _targetPercent = 0;
-        private int _currentDisplayPercent = 0;
+        private int _currentDisplayPercent = 0; 
 
         public GuiProgressReporter(ProgressBar progressBar, Label statusLabel, ILogger logger,
                          string xmlPath, string xslPath)
@@ -33,7 +32,6 @@ namespace XmlToPdfConverter.GUI
             _statusLabel = statusLabel;
             _logger = logger;
 
-            // ✅ AJOUTER: Stocker les chemins pour l'estimation
             _xmlPath = xmlPath;
             _xslPath = xslPath;
 
@@ -41,7 +39,6 @@ namespace XmlToPdfConverter.GUI
             _startTime = DateTime.Now;
             _lastUpdateTime = DateTime.Now;
 
-            // Timer pour l'animation fluide de la barre de progression
             _smoothingTimer = new System.Windows.Forms.Timer();
             _smoothingTimer.Interval = 50; // 20 FPS
             _smoothingTimer.Tick += SmoothingTimer_Tick;
@@ -77,20 +74,16 @@ namespace XmlToPdfConverter.GUI
                     var xslInfo = new FileInfo(xslPath);
                     string xslContent = File.ReadAllText(xslPath);
 
-                    // Facteur de complexité XSL basé sur le contenu
                     int xslComplexity = 1;
 
-                    // Templates multiples augmentent la complexité
                     int templateCount = System.Text.RegularExpressions.Regex.Matches(xslContent, @"<xsl:template").Count;
                     if (templateCount > 10) xslComplexity += 2;
                     else if (templateCount > 5) xslComplexity += 1;
 
-                    // Boucles et conditions
                     int loopCount = System.Text.RegularExpressions.Regex.Matches(xslContent, @"<xsl:for-each").Count;
                     int ifCount = System.Text.RegularExpressions.Regex.Matches(xslContent, @"<xsl:if").Count;
                     xslComplexity += (loopCount + ifCount) / 3;
 
-                    // CSS embarqué augmente le temps de rendu
                     if (xslContent.Contains("<style>") || xslContent.Contains("css")) xslComplexity += 1;
 
                     complexity += (xslInfo.Length / 100) * xslComplexity;
@@ -99,7 +92,7 @@ namespace XmlToPdfConverter.GUI
             catch (Exception ex)
             {
                 _logger?.Log($"Erreur calcul complexité: {ex.Message}", LogLevel.Warning);
-                complexity = 30000; // Valeur par défaut plus réaliste
+                complexity = 30000;
             }
 
             return Math.Max(complexity, 10000);
@@ -109,14 +102,13 @@ namespace XmlToPdfConverter.GUI
         {
             try
             {
-                double estimatedSeconds = 15; // Base plus réaliste pour XML+XSL
+                double estimatedSeconds = 15;
 
                 if (File.Exists(_xmlPath))
                 {
                     var xmlInfo = new FileInfo(_xmlPath);
                     double xmlMB = xmlInfo.Length / (1024.0 * 1024.0);
 
-                    // Estimation basée sur la taille XML
                     if (xmlMB < 1)
                         estimatedSeconds = 8 + (xmlMB * 12);
                     else if (xmlMB < 5)
@@ -127,7 +119,6 @@ namespace XmlToPdfConverter.GUI
                         estimatedSeconds = 30 + (xmlMB * 1.5);
                 }
 
-                // Facteur XSL
                 if (File.Exists(_xslPath))
                 {
                     var xslInfo = new FileInfo(_xslPath);
@@ -135,7 +126,6 @@ namespace XmlToPdfConverter.GUI
 
                     double xslFactor = 1.0;
 
-                    // Complexité basée sur le contenu XSL
                     int templates = System.Text.RegularExpressions.Regex.Matches(xslContent, @"<xsl:template").Count;
                     int loops = System.Text.RegularExpressions.Regex.Matches(xslContent, @"<xsl:for-each").Count;
 
@@ -143,7 +133,6 @@ namespace XmlToPdfConverter.GUI
                     else if (templates > 10 || loops > 5) xslFactor = 1.3;
                     else if (templates > 5 || loops > 2) xslFactor = 1.2;
 
-                    // CSS/Style augmente le temps de rendu
                     if (xslContent.Contains("<style>") || xslContent.Contains("css"))
                         xslFactor *= 1.2;
 
@@ -221,7 +210,6 @@ namespace XmlToPdfConverter.GUI
 
         private string CalculateTimeRemaining(int percent, TimeSpan elapsed)
         {
-            // ✅ MODIFIER: Afficher l'estimation au lieu des calculs complexes
             if (elapsed.TotalSeconds < 3)
             {
                 var estimatedTotal = GetEstimatedDuration();
@@ -233,7 +221,6 @@ namespace XmlToPdfConverter.GUI
                 var originalEstimate = GetEstimatedDuration();
                 var remainingTime = originalEstimate - elapsed;
 
-                // Si on dépasse l'estimation, recalculer simplement
                 if (remainingTime.TotalSeconds <= 0 && percent > 10)
                 {
                     double totalEstimated = (elapsed.TotalSeconds * 100) / Math.Max(percent, 5);
