@@ -10,22 +10,7 @@ namespace XmlToPdfConverter.Core.Engine
     {
         public string Preprocess(string xmlInputPath, string xslInputPath, ILogger logger)
         {
-            string xmlContent = File.ReadAllText(xmlInputPath, Encoding.UTF8);
-
-            // Calculer le chemin relatif du XSL
-            string xmlDir = Path.GetDirectoryName(Path.GetFullPath(xmlInputPath));
-            string xslDir = Path.GetDirectoryName(Path.GetFullPath(xslInputPath));
-            string xslFileName = Path.GetFileName(xslInputPath);
-
-            /*string relativePath;
-            if (xmlDir.Equals(xslDir, StringComparison.OrdinalIgnoreCase))
-            {
-                relativePath = xslFileName;
-            }
-            else
-            {
-                relativePath = new Uri(Path.GetFullPath(xslInputPath)).AbsoluteUri;
-            }*/
+            string xmlContent = File.ReadAllText(xmlInputPath, Encoding.UTF8);         
 
             string relativePath = new Uri(Path.GetFullPath(xslInputPath)).AbsoluteUri;
 
@@ -62,7 +47,7 @@ namespace XmlToPdfConverter.Core.Engine
                 newContent.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
                 logger?.Log("Ajout de l'en-tête XML par défaut", LogLevel.Debug);
 
-                // Ajouter la référence XSL
+                // Ajout de la référence XSL
                 newContent.AppendLine(newXslReference);
 
                 // Ajouter le contenu XML nettoyé

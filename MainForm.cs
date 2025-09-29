@@ -2,7 +2,6 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using XmlToPdfConverter.Core.Configuration;
 using XmlToPdfConverter.Core.Interfaces;
@@ -29,9 +28,6 @@ namespace XmlToPdfConverter.GUI
         private Button btnBrowseOutput;
         private ProgressBar progressBar;
         private RichTextBox rtbLog;
-        private Label _statusLabel;
-        private GuiProgressReporter _progressReporter;
-        private DateTime _conversionStartTime;
 
         public MainForm()
         {
@@ -234,20 +230,6 @@ namespace XmlToPdfConverter.GUI
             mainPanel.Controls.Add(progressBar);
             yPos += 40;
 
-            Label lblStatus = new Label
-            {
-                Text = "Prêt à convertir",
-                Location = new Point(140, yPos - 5),
-                Size = new Size(470, 25),
-                TextAlign = ContentAlignment.MiddleLeft,
-                Font = new Font("Segoe UI", 9F),
-                ForeColor = Color.DarkBlue,
-                AutoEllipsis = true
-            };
-            mainPanel.Controls.Add(lblStatus);
-
-            _statusLabel = lblStatus;
-
             // Zone de log
             Label logLabel = new Label
             {
@@ -295,7 +277,6 @@ namespace XmlToPdfConverter.GUI
                     if (string.IsNullOrEmpty(txtOutputDir.Text))
                     {
                         txtOutputDir.Text = Path.GetDirectoryName(ofd.FileName);
-                        //outputDirectoryPath = Path.GetDirectoryName(ofd.FileName);
                     }
                 }
             }
@@ -315,7 +296,6 @@ namespace XmlToPdfConverter.GUI
                     if (string.IsNullOrEmpty(txtOutputDir.Text))
                     {
                         txtOutputDir.Text = Path.GetDirectoryName(ofd.FileName);
-                        //outputDirectoryPath = Path.GetDirectoryName(ofd.FileName);
                     }
                 }
             }
@@ -412,139 +392,59 @@ namespace XmlToPdfConverter.GUI
         {
             if (!ValidateInputs()) return;
 
-            // Désactiver le bouton et préparer l'interface
-            btnConvert.Enabled = false;
-            btnConvert.Text = "Conversion en cours...";
-            btnConvert.BackColor = Color.Orange;
-
-            // Créer le système de progression adaptatif
-            _progressReporter = new GuiProgressReporter(progressBar, _statusLabel,
-                new GuiLogger(rtbLog), txtXmlFile.Text, txtXslFile.Text);
-
-            // Afficher l'estimation de durée
-            var estimatedDuration = _progressReporter.GetEstimatedDuration();
-            LogMessage($"🔄 Début de conversion (durée estimée: {FormatDuration(estimatedDuration)})");
-
-            // Démarrer en mode marquee pour l'initialisation
-            _progressReporter.SetMarqueeMode(true);
-            _conversionStartTime = DateTime.Now;
-
             try
             {
-                // Créer le progress reporter pour le service
-                var progress = new Progress<ConversionProgress>(p =>
-                {
-                    var elapsed = DateTime.Now - _conversionStartTime;
-                    int simplePercent = CalculateSimpleProgress(p.Percentage, elapsed, estimatedDuration);
-
-                    _progressReporter.Report(simplePercent, p.CurrentStep);
-                });
-                 
-                // Ajouter un feedback de démarrage
-                _progressReporter.Report(0, "Initialisation de la conversion...");
 
                 var conversionResult = await _conversionService.ConvertAsync(
                     txtXmlFile.Text,
                     txtXslFile.Text,
-                    txtOutputDir.Text,
-                    progress
-                );
+                    txtOutputDir.Text
+                    //progress
+                    );
 
                 if (conversionResult.Success)
                 {
-                    _progressReporter.Complete();
                     LogMessage($"✅ Conversion réussie en {FormatDuration(conversionResult.Duration)}!");
 
                     if (chkOpenResult.Checked)
                     {
                         try
                         {
-                            // ✅ Attendre que le fichier soit complètement écrit
-                            await Task.Delay(1000);
-
-                            if (File.Exists(conversionResult.OutputPath))
-                            {
-                                var startInfo = new ProcessStartInfo
-                                {
-                                    FileName = conversionResult.OutputPath,
-                                    UseShellExecute = true,
-                                    Verb = "open"
-                                };
-                                Process.Start(startInfo);
-                                LogMessage($"📄 Ouverture du PDF...");
-                            }
+                            Process.Start(new ProcessStartInfo(conversionResult.OutputPath) { UseShellExecute = true });
                         }
                         catch (Exception ex)
                         {
                             LogMessage($"⚠ Impossible d'ouvrir le PDF: {ex.Message}");
-                            LogMessage($"💡 Ouvrez manuellement: {conversionResult.OutputPath}");
                         }
                     }
 
-                    MessageBox.Show($"Conversion réussie!\nTaille: {conversionResult.FileSizeBytes:N0} octets\nDurée: {FormatDuration(conversionResult.Duration)}",
+                    MessageBox.Show($"Conversion réussie!\nTaille: {conversionResult.FileSizeBytes} octets\nDurée: {FormatDuration(conversionResult.Duration)}",
                                    "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
                 {
-                    _progressReporter.Reset();
                     LogMessage($"❌ Conversion échouée: {conversionResult.ErrorMessage}");
                     MessageBox.Show($"Conversion échouée: {conversionResult.ErrorMessage}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
-            catch (TimeoutException)
-            {
-                _progressReporter?.Reset();
-                LogMessage("⏰ Timeout: La conversion a pris trop de temps");
-                MessageBox.Show("La conversion a pris trop de temps et a été annulée.\nVérifiez la taille et la complexité de vos fichiers.",
-                               "Timeout", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-            catch (Exception ex)
-            {
-                _progressReporter?.Reset();
-                LogMessage($"💥 Erreur critique: {ex.Message}");
-                MessageBox.Show($"Erreur: {ex.Message}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
             finally
             {
-                // Restaurer l'interface
-                btnConvert.Enabled = true;
                 btnConvert.Text = "Convertir en PDF";
                 btnConvert.BackColor = Color.FromArgb(0, 120, 215);
+                progressBar.MarqueeAnimationSpeed = 0;
 
-                // Nettoyer le progress reporter
-                _progressReporter = null;
-            }
-        }
-
-        // Méthode pour calculer le pourcentage adapté basé sur l'estimation
-        private int CalculateSimpleProgress(int reportedPercent, TimeSpan elapsed, TimeSpan estimated)
-        {
-            // Progression temporelle simple
-            int timeBasedPercent = 0;
-            if (estimated.TotalSeconds > 0)
-            {
-                timeBasedPercent = (int)((elapsed.TotalSeconds / estimated.TotalSeconds) * 90); // Max 90%
-                timeBasedPercent = Math.Min(90, timeBasedPercent);
-            }
-
-            // ✅ LOGIQUE SIMPLE :
-            if (reportedPercent == 0) // Chrome pas encore démarré ou en préparation
-            {
-                // Progression basée uniquement sur le temps (0-10% les 3 premières secondes)
-                return Math.Min(10, (int)(elapsed.TotalSeconds * 3));
-            }
-            else if (reportedPercent < 75) // Chrome en cours d'exécution
-            {
-                // Progression mixte : 50% temps + 50% rapport Chrome
-                return Math.Max(reportedPercent, (timeBasedPercent + reportedPercent) / 2);
-            }
-            else // Chrome terminé, attente PDF
-            {
-                // Utiliser directement le rapport de Chrome (75-100%)
-                return Math.Max(75, reportedPercent);
             }
         }        
 
+        private void SetProgressBarActive(bool active)
+        {
+            if (progressBar.InvokeRequired)
+            {
+                progressBar.Invoke(new Action<bool>(SetProgressBarActive), active);
+                return;
+            }
+            progressBar.MarqueeAnimationSpeed = active ? 30 : 0;
+        }        
         private static string FormatDuration(TimeSpan duration)
         {
             if (duration.TotalMinutes < 1)
