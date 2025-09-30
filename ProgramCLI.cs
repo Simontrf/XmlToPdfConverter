@@ -172,7 +172,7 @@ namespace XmlToPdfConverter.CLI
 
         private static void ShowUsage()
         {
-            Console.WriteLine("Convertisseur XML vers PDF (Chrome) - Version Refactorisée");
+            Console.WriteLine("Convertisseur XML vers PDF (Chrome)");
             Console.WriteLine();
             Console.WriteLine("USAGE:");
             Console.WriteLine("  XmlToPdfConverter.CLI.exe <fichier.xml> <fichier.xsl> [sortie.pdf]");

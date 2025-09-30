@@ -8,7 +8,7 @@ using XmlToPdfConverter.Core.Interfaces;
 
 namespace XmlToPdfConverter.Core.Services
 {
-    public class ChromeConversionService : IConversionService, IDisposable
+    public class ChromeConversionService : IConversionService, IDisposable //Service principal de conversion chrome XMS + XSL vers PDF, gestion de validation, prétraitement, conversion etnettoyage
     {
         private readonly ChromeConfiguration _chromeConfig;
         private readonly AppConfiguration _appConfig;
@@ -19,12 +19,12 @@ namespace XmlToPdfConverter.Core.Services
         public bool IsAvailable => _chromeConfig.IsAvailable;
 
         public ChromeConversionService(
-            ILogger logger,
-            AppConfiguration appConfig = null,
-            IResourceManager resourceManager = null,
-            IXmlPreprocessor preprocessor = null)
+            ILogger logger, //Pour traquer les opérations
+            AppConfiguration appConfig = null, //Configuration de l'app (optionnel, valeur pas défaut si null)
+            IResourceManager resourceManager = null, //Gestionnaire de ressources (créé automatiquement si null)
+            IXmlPreprocessor preprocessor = null) //Préprocesseur XML (créé automatiquement si null)
         {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger)); 
             _appConfig = appConfig ?? new AppConfiguration();
             _resourceManager = resourceManager ?? new ResourceManager(logger);
             _preprocessor = preprocessor ?? new XmlPreprocessor();
@@ -32,9 +32,9 @@ namespace XmlToPdfConverter.Core.Services
         }
 
         public async Task<ConversionResult> ConvertAsync(
-            string xmlPath,
-            string xslPath,
-            string outputPath,
+            string xmlPath, //Chemin du fichier XML source
+            string xslPath, //Chemin du fichier XSl
+            string outputPath, //Chemin cible de sortie du PDF
             IProgress<ConversionProgress> progress = null)
         {
             var stopwatch = Stopwatch.StartNew();
@@ -46,21 +46,21 @@ namespace XmlToPdfConverter.Core.Services
                 if (!ValidateInputs(xmlPath, xslPath, outputPath))
                 {
                     result.ErrorMessage = "Validation des entrées échouée";
-                    return result;
+                    return result; //Retroune succés, la durée, taille de fichier et erreurs
                 }                
 
-                // Prétraitement XML
+                // Prétraitement XML, injection de la référence XSL dans le XML
                 string preprocessedXml = _preprocessor.Preprocess(xmlPath, xslPath, _logger);
                 _resourceManager.RegisterTemporaryFile(preprocessedXml);                
 
-                // Conversion Chrome
+                // Conversion Chrome avec l'XML prétraité
                 bool success = await ConvertWithChromeAsync(
                     preprocessedXml,
                     outputPath,
                     progress,
                     stopwatch);
 
-                if (success && File.Exists(outputPath))
+                if (success && File.Exists(outputPath)) //vérification des résultats
                 {
                     var fileInfo = new FileInfo(outputPath);
                     result.Success = true;
@@ -68,7 +68,7 @@ namespace XmlToPdfConverter.Core.Services
                     result.FileSizeBytes = fileInfo.Length;
                     result.Duration = stopwatch.Elapsed;
 
-                    _logger.Log($"✅ Conversion réussie en {FormatDuration(stopwatch.Elapsed)} ({fileInfo.Length} octets)", LogLevel.Info);
+                    _logger.Log($"✅ Conversion réussie en {FormatDuration(stopwatch.Elapsed)} ({fileInfo.Length} octets)", LogLevel.Info); //Affiche la durée total de conversion ainsi que la taille du PDF obtenu en octets
                 }
                 else
                 {
@@ -85,7 +85,7 @@ namespace XmlToPdfConverter.Core.Services
                 stopwatch.Stop();
                 result.Duration = stopwatch.Elapsed;
 
-                // Nettoyer les fichiers temporaires
+                // Nettoyer les fichiers temporaires (fichier XML, profil et processus Chrome)
                 try
                 {
                     _resourceManager.CleanupAll();
@@ -99,28 +99,29 @@ namespace XmlToPdfConverter.Core.Services
         }
 
         private async Task<bool> ConvertWithChromeAsync(
-            string xmlPath,
-            string outputPath,
-            IProgress<ConversionProgress> progress,
-            Stopwatch totalStopwatch)
+            string xmlPath, //Chemin du fichier XML prétraité
+            string outputPath, //Chemin de sortie du PDF
+            IProgress<ConversionProgress> progress, //Reporter de progression
+            Stopwatch totalStopwatch) //Chronomètre permettant de mesurer le temps global de conversion
         {
             try
             {
-                string xmlUrl = new Uri(Path.GetFullPath(xmlPath)).AbsoluteUri;
+                string xmlUrl = new Uri(Path.GetFullPath(xmlPath)).AbsoluteUri; //Conversion du chemin en URI 'file://' pour chrome
 
-                // Créer le répertoire de sortie si nécessaire
+                // Création du répertoire de sortie si nécessaire
                 string outputDir = Path.GetDirectoryName(outputPath);
                 if (!Directory.Exists(outputDir))
                 {
                     Directory.CreateDirectory(outputDir);
                 }
 
-                var startInfo = new ProcessStartInfo
+                var startInfo = new ProcessStartInfo //Configuration du processus chrome
                 {
                     FileName = _chromeConfig.ChromePath,
                     Arguments = string.Join(" ", _appConfig.Chrome.GetArguments(
                         outputPath, xmlUrl, _chromeConfig.ProfilePath)),
-                    UseShellExecute = false,
+                    //Ensemble de paramètres permettant de s'assurer qu'aucune instance chrome ne s'ouvre
+                    UseShellExecute = false, 
                     CreateNoWindow = true,
                     WindowStyle = ProcessWindowStyle.Hidden,
                     RedirectStandardError = true,
@@ -131,12 +132,12 @@ namespace XmlToPdfConverter.Core.Services
 
                 using (var process = Process.Start(startInfo))
                 {
-                    _resourceManager.RegisterProcess(process.Id);
+                    _resourceManager.RegisterProcess(process.Id); //Enregistrement du processus pour futur nettoyage 
 
                     var progressStopwatch = Stopwatch.StartNew();
                     var lastProgressReport = DateTime.MinValue;
 
-                    // Surveillance du processus avec progress
+                    // Surveillance du processus avec rapports de progression
                     while (!process.HasExited)
                     {
                         if (process.WaitForExit(_appConfig.Conversion.ProgressUpdateIntervalMs))
@@ -154,7 +155,7 @@ namespace XmlToPdfConverter.Core.Services
                         }
                     }
 
-                    // Vérifier le code de sortie
+                    // Vérification du code de sortie
                     var exitCode = process.ExitCode;
                     if (exitCode != 0)
                     {
@@ -162,14 +163,14 @@ namespace XmlToPdfConverter.Core.Services
                         return false;
                     }
 
-                    progress?.Report(new ConversionProgress
+                    progress?.Report(new ConversionProgress //Rapport de progression
                     {
                         Percentage = 75,
                         CurrentStep = "Vérification du PDF...",
                         Elapsed = totalStopwatch.Elapsed
                     });
 
-                    // Attendre la création du fichier PDF
+                    // Attente et validation de la création du fichier PDF
                     return await WaitForPdfCreationAsync(outputPath, progress, totalStopwatch);
                 }
             }
@@ -180,10 +181,11 @@ namespace XmlToPdfConverter.Core.Services
             }
         }
 
+        //Attente et vérification de la stabilité du fichier PDF
         private async Task<bool> WaitForPdfCreationAsync(
-            string pdfPath,
-            IProgress<ConversionProgress> progress,
-            Stopwatch totalStopwatch)
+            string pdfPath, //Chemin attendu du fichier PDf
+            IProgress<ConversionProgress> progress, //Reporter de progression
+            Stopwatch totalStopwatch) //Chronomètre global
         {
             var waitStopwatch = Stopwatch.StartNew();
             var maxWaitTime = TimeSpan.FromMinutes(_appConfig.Conversion.MaxWaitTimeMinutes);
@@ -193,6 +195,7 @@ namespace XmlToPdfConverter.Core.Services
             int stableCount = 0;
             var lastProgressUpdate = DateTime.MinValue;
 
+            //Vérification de la taille et de la croissance du PDF
             while (waitStopwatch.Elapsed < maxWaitTime)
             {
                 if (File.Exists(pdfPath))
@@ -219,7 +222,7 @@ namespace XmlToPdfConverter.Core.Services
                     }
                 }
 
-                // Progress update
+                // Progress update, attente du PDF de 75 à 95%
                 if ((DateTime.Now - lastProgressUpdate).TotalSeconds >= 5)
                 {
                     lastProgressUpdate = DateTime.Now;
@@ -233,13 +236,14 @@ namespace XmlToPdfConverter.Core.Services
                     });
                 }
 
-                await Task.Delay(1000);
+                await Task.Delay(1000); //Acutalise chaque secondes
             }
 
             _logger.Log($"❌ Timeout: PDF non créé après {maxWaitTime.TotalMinutes} minutes", LogLevel.Error);
             return false;
         }
 
+        //Vérification qu'aunce entrée est manquante avec retour à l'utlisateur si manquement(s)
         private bool ValidateInputs(string xmlPath, string xslPath, string outputPath)
         {
             if (string.IsNullOrEmpty(xmlPath) || !File.Exists(xmlPath))
@@ -281,7 +285,7 @@ namespace XmlToPdfConverter.Core.Services
             _resourceManager?.Dispose();
             _chromeConfig?.Dispose();
         }
-        private static string FormatDuration(TimeSpan duration)
+        private static string FormatDuration(TimeSpan duration) //Adaptation du format d'affichage de la durée en fonction du temps écoulé
         {
             if (duration.TotalMinutes < 1)
                 return $"{duration.Seconds}s";

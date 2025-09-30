@@ -1,23 +1,21 @@
-﻿using XmlToPdfConverter.Core.Interfaces;
-
-namespace XmlToPdfConverter.Core.Configuration
+﻿namespace XmlToPdfConverter.Core.Configuration
 {
     public class AppConfiguration
     {
         // Chrome Settings
-        public ChromeSettings Chrome { get; set; } = new ChromeSettings();
+        public ChromeSettings Chrome { get; set; } = new ChromeSettings(); //Parametres de configuration pour chrome
 
         // Conversion Settings
-        public ConversionSettings Conversion { get; set; } = new ConversionSettings();
+        public ConversionSettings Conversion { get; set; } = new ConversionSettings(); //Parametres de configuration pour le systèmes de conversion
 
         // Logging Settings
-        public LoggingSettings Logging { get; set; } = new LoggingSettings();
+        public LoggingSettings Logging { get; set; } = new LoggingSettings(); //Parametres de configuration pour le systèmes de logs
     }
 
-    public class ChromeSettings
+    public class ChromeSettings //Configuration des paramètres chrome
     {
-        public bool UseTemporaryProfile { get; set; } = true;
-        public string CustomProfilePath { get; set; }
+        public bool UseTemporaryProfile { get; set; } = true; //Utilisation d'un profil chrome temporaire 
+        public string CustomProfilePath { get; set; } //chemin du profil Chrome si UseTemporaryprofile est sur 'false'
 
         public string[] GetArguments(string pdfPath, string xmlUrl, string profilePath)
         {
@@ -67,15 +65,15 @@ namespace XmlToPdfConverter.Core.Configuration
 
     public class ConversionSettings
     {
-        public int FileStabilityCheckSeconds { get; set; } = 3;
-        public int MaxWaitTimeMinutes { get; set; } = 60;
-        public int ProgressUpdateIntervalMs { get; set; } = 300;
-        public bool OpenResultAfterConversion { get; set; } = false;
+        public int FileStabilityCheckSeconds { get; set; } = 3; //Durée requise de stabilité de taille de fichier pour valider un PDF, en secondes
+        public int MaxWaitTimeMinutes { get; set; } = 60; //Temps d'attente maximum de la génération de pdf en minutes
+        public int ProgressUpdateIntervalMs { get; set; } = 1000; //Intervalle de misa à jour de la progression en ms 
+        public bool OpenResultAfterConversion { get; set; } = false; //Ouverture ou non du pdf après conversion (désactiver par défaut)
     }
 
     public class LoggingSettings
     {
-        public bool EnableDebugLogging { get; set; } = false;
-        public int ProgressLogIntervalMinutes { get; set; } = 1;
+        public bool EnableDebugLogging { get; set; } = false; //Activation ou non des logs de débogage détaillés
+        public int ProgressLogIntervalMinutes { get; set; } = 1; //Intervalle de temps entre les logs de progression en minutes
     }
 }
