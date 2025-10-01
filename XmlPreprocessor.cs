@@ -6,15 +6,16 @@ using XmlToPdfConverter.Core.Interfaces;
 
 namespace XmlToPdfConverter.Core.Engine
 {
+    //Préprocesseur XML pour injection de références XSL, nettoie les références existantes et injecte la nouvelle référence XSL, crée un fichier temporaire prêt pour la conversion Chrome.
     public class XmlPreprocessor : IXmlPreprocessor
     {
         public string Preprocess(string xmlInputPath, string xslInputPath, ILogger logger)
         {
-            string xmlContent = File.ReadAllText(xmlInputPath, Encoding.UTF8);         
+            string xmlContent = File.ReadAllText(xmlInputPath, Encoding.UTF8); //Lis le fichier XML en entier       
 
-            string relativePath = new Uri(Path.GetFullPath(xslInputPath)).AbsoluteUri;
+            string relativePath = new Uri(Path.GetFullPath(xslInputPath)).AbsoluteUri; //Converti le chemin XSL en URI absolue 'file://'
 
-            // SUPPRIMER toutes les références XSL existantes
+            //Supprimer toutes les références XSL existantes
             string pattern = @"<\?xml-stylesheet[^>]*\?>\s*";
             xmlContent = Regex.Replace(xmlContent, pattern, "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
             logger?.Log("Suppression de toutes les références XSL existantes", LogLevel.Debug);
@@ -59,6 +60,7 @@ namespace XmlToPdfConverter.Core.Engine
 
             // Créer le fichier temporaire
             string xslParentFolder = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(xslInputPath)));
+            //Nom unique de fichier temporaire avec GUID
             string tempFile = Path.Combine(xslParentFolder, "preprocessed_" + Guid.NewGuid() + ".xml");
 
             File.WriteAllText(tempFile, newContent.ToString(), Encoding.UTF8);
