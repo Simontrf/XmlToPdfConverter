@@ -10,6 +10,7 @@ using XmlToPdfConverter.Core.Services;
 
 namespace XmlToPdfConverter.GUI
 {
+    //Formulaire principal de l'interface graphique de conversion XML vers PDF, gestion des fichiers, de config et d'execution de la conversion
     public partial class MainForm : Form
     {
         
@@ -17,43 +18,48 @@ namespace XmlToPdfConverter.GUI
         private readonly AppConfiguration _appConfig;
         private readonly IResourceManager _resourceManager;
 
-        // Contrôles UI
+        //Zones de texte pour les chemins de fichiers entrées et sortie
         private TextBox txtXmlFile;
         private TextBox txtXslFile;
         private TextBox txtOutputDir;
+        //Option et contrôles
         private CheckBox chkOpenResult;
         private Button btnConvert;
         private Button btnBrowseXml;
         private Button btnBrowseXsl;
         private Button btnBrowseOutput;
+        //Affichage
         private ProgressBar progressBar;
         private RichTextBox rtbLog;
 
+        // Initialise le formulaire principal et les services de conversion
         public MainForm()
         {
+            //Création de l'interface utilisateur
             InitializeComponent();
-
+            //Initialisation de la configuration
             _appConfig = new AppConfiguration();
-
+            //Création des services (logger, gestionnaire de ressources et conversion)
             var logger = new GuiLogger(rtbLog);
             _resourceManager = new ResourceManager(logger);
             _conversionService = new ChromeConversionService(logger, _appConfig, _resourceManager);
-
+            //vérification de la disponibilité de chrome
             CheckDependencies();
         }
 
+        //Construit l'interface graphique de l'utilisateur (boutons, textbox...)
         private void InitializeComponent()
         {
             this.SuspendLayout();
 
-            // Configuration de la fenêtre principale
+            //Configuration de la fenêtre principale
             this.Text = "Convertisseur XML vers PDF (Chrome) - Optimisé";
             this.Size = new Size(720, 780);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.MinimumSize = new Size(900, 830);
             this.Font = new Font("Segoe UI", 9F);
 
-            // Panel principal
+            //Panel principal avec scroll automatique
             Panel mainPanel = new Panel
             {
                 AutoScroll = true,
@@ -64,7 +70,7 @@ namespace XmlToPdfConverter.GUI
 
             int yPos = 10;
 
-            // Titre
+            //Titre
             Label titleLabel = new Label
             {
                 Text = "Convertisseur XML vers PDF (Chrome) - Version Optimisée",
@@ -76,7 +82,7 @@ namespace XmlToPdfConverter.GUI
             mainPanel.Controls.Add(titleLabel);
             yPos += 40;
 
-            // Description
+            //Description
             Label descLabel = new Label
             {
                 Text = "Conversion rapide XML + XSL vers PDF avec optimisations Chrome",
@@ -89,7 +95,7 @@ namespace XmlToPdfConverter.GUI
             mainPanel.Controls.Add(descLabel);
             yPos += 35;
 
-            // Section fichiers d'entrée
+            //Section fichiers d'entrée
             Label sectionLabel = new Label
             {
                 Text = "Fichiers d'entrée:",
@@ -100,7 +106,7 @@ namespace XmlToPdfConverter.GUI
             mainPanel.Controls.Add(sectionLabel);
             yPos += 30;
 
-            // Fichier XML
+            //Fichier XML
             Label xmlLabel = new Label
             {
                 Text = "Fichier XML :",
@@ -127,7 +133,7 @@ namespace XmlToPdfConverter.GUI
             mainPanel.Controls.Add(btnBrowseXml);
             yPos += 35;
 
-            // Fichier XSL
+            //Fichier XSL
             Label xslLabel = new Label
             {
                 Text = "Fichier XSL :",
@@ -155,7 +161,7 @@ namespace XmlToPdfConverter.GUI
             yPos += 35;
 
 
-            // Dossier de sortie
+            //Dossier de sortie
             Label outputLabel = new Label
             {
                 Text = "Dossier de sortie :",
@@ -183,7 +189,7 @@ namespace XmlToPdfConverter.GUI
             mainPanel.Controls.Add(btnBrowseOutput);
             yPos += 45;
 
-            // Section options
+            //Section options
             Label optionsLabel = new Label
             {
                 Text = "Options d'optimisation :",
@@ -194,7 +200,7 @@ namespace XmlToPdfConverter.GUI
             mainPanel.Controls.Add(optionsLabel);
             yPos += 30;
 
-            // Options de conversion
+            //Options de conversion, checkbox pour ouvrir ou non le PDF après conversion
             chkOpenResult = new CheckBox
             {
                 Text = "Ouvrir le PDF après conversion",
@@ -205,7 +211,7 @@ namespace XmlToPdfConverter.GUI
             mainPanel.Controls.Add(chkOpenResult);
             yPos += 30;
 
-            // Boutons de conversion
+            //Boutons de conversion
             btnConvert = new Button
             {
                 Text = "Convertir en PDF",
@@ -218,7 +224,7 @@ namespace XmlToPdfConverter.GUI
             btnConvert.Click += BtnConvert_Click;
             mainPanel.Controls.Add(btnConvert);
 
-            // Barre de progression
+            //Barre de progression
             progressBar = new ProgressBar
             {
                 Location = new Point(10, yPos),
@@ -230,7 +236,7 @@ namespace XmlToPdfConverter.GUI
             mainPanel.Controls.Add(progressBar);
             yPos += 40;
 
-            // Zone de log
+            //Zone de log
             Label logLabel = new Label
             {
                 Text = "Journal :",
@@ -240,7 +246,8 @@ namespace XmlToPdfConverter.GUI
             };
             mainPanel.Controls.Add(logLabel);
             yPos += 25;
-
+            
+            //RichTextBox pour afficher les logs avec couleurs
             rtbLog = new RichTextBox
             {
                 Location = new Point(10, yPos),
@@ -256,6 +263,7 @@ namespace XmlToPdfConverter.GUI
             this.PerformLayout();
         }
 
+        // Gestionnaire de fermeture du formulaire, libère les ressources (services, profils Chrome, etc.)
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             _conversionService?.Dispose();
@@ -263,6 +271,7 @@ namespace XmlToPdfConverter.GUI
             base.OnFormClosing(e);
         }
 
+        //Ouvre une fenêtre  pour sélectionner le fichier XML source
         private void BtnBrowseXml_Click(object sender, EventArgs e)
         {
             using (OpenFileDialog ofd = new OpenFileDialog())
@@ -274,6 +283,7 @@ namespace XmlToPdfConverter.GUI
                 {
                     txtXmlFile.Text = ofd.FileName;
 
+                    //Auto-suggestion de dossier de sortie si aucun chemin n'est renseigné
                     if (string.IsNullOrEmpty(txtOutputDir.Text))
                     {
                         txtOutputDir.Text = Path.GetDirectoryName(ofd.FileName);
@@ -282,6 +292,7 @@ namespace XmlToPdfConverter.GUI
             }
         }
 
+        //Ouvre une fenêtre pour sélectionner le fichier XSL
         private void BtnBrowseXsl_Click(object sender, EventArgs e)
         {
             using (OpenFileDialog ofd = new OpenFileDialog())
@@ -293,6 +304,7 @@ namespace XmlToPdfConverter.GUI
                 {
                     txtXslFile.Text = ofd.FileName;
 
+                    //Auto-suggestion de dossier de sortie si aucun chemin n'est renseigné
                     if (string.IsNullOrEmpty(txtOutputDir.Text))
                     {
                         txtOutputDir.Text = Path.GetDirectoryName(ofd.FileName);
@@ -301,6 +313,7 @@ namespace XmlToPdfConverter.GUI
             }
         }
 
+        //Ouvre une fenêtre pour définir le chemin de sortie du PDF
         private void BtnBrowseOutput_Click(object sender, EventArgs e)
         {
             using (SaveFileDialog sfd = new SaveFileDialog())
@@ -309,7 +322,7 @@ namespace XmlToPdfConverter.GUI
                 sfd.Filter = "Fichiers PDF (*.pdf)|*.pdf|Tous les fichiers (*.*)|*.*";
                 sfd.DefaultExt = "pdf";
 
-                // Nom suggéré basé sur le XML sélectionné
+                //Nom suggéré basé sur le XML sélectionné
                 if (!string.IsNullOrEmpty(txtXmlFile.Text))
                 {
                     string baseName = Path.GetFileNameWithoutExtension(txtXmlFile.Text);
@@ -323,22 +336,26 @@ namespace XmlToPdfConverter.GUI
             }
         }
 
+        //Ajoute un message horodaté dans la zone de log
         private void LogMessage(string message)
         {
+            //Vérifier si on doit invoquer sur le thread UI
             if (rtbLog.InvokeRequired)
             {
                 rtbLog.Invoke(new Action<string>(LogMessage), message);
                 return;
             }
-
+            //Ajouts de l'horodatage avec timestamp
             string timestamp = DateTime.Now.ToString("HH:mm:ss");
             rtbLog.AppendText($"[{timestamp}] {message}\n");
             rtbLog.ScrollToCaret();
             Application.DoEvents();
         }
 
+        // Vérifie la disponibilité de Chrome au démarrage de l'application
         private void CheckDependencies()
         {
+            //Affichage dans les logs
             LogMessage("Vérification des dépendances...");
 
             if (_conversionService.IsAvailable)
@@ -352,60 +369,64 @@ namespace XmlToPdfConverter.GUI
             }
         }
 
+        //Valide que tous les fichiers nécessaires sont sélectionnés et existent
         private bool ValidateInputs()
         {
+            //Vérification de la sélection d'un fichier XML
             if (string.IsNullOrEmpty(txtXmlFile.Text))
             {
                 MessageBox.Show("Veuillez sélectionner un fichier XML", "Attention", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
-
+            //Vérification de l'existance du fichier XML
             if (!File.Exists(txtXmlFile.Text))
             {
                 MessageBox.Show("Le fichier XML spécifié n'existe pas", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return false;
             }
-
+            //Vérification de la sélection fichier XSL
             if (string.IsNullOrEmpty(txtXslFile.Text))
             {
                 MessageBox.Show("Veuillez sélectionner un fichier XSL", "Attention", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
-
+            //Vérification de l'existance du fichier XSL
             if (!File.Exists(txtXslFile.Text))
             {
                 MessageBox.Show("Le fichier XSL spécifié n'existe pas", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return false;
             }
-
+            //Vérifiacation de la sélection d'un dossier de sortie
             if (string.IsNullOrEmpty(txtOutputDir.Text))
             {
                 MessageBox.Show("Veuillez sélectionner un dossier de sortie", "Attention", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
 
-            // Le service se chargera de valider Chrome et créer les dossiers
+            //Le service se chargera de valider Chrome et créer les dossiers
             return true;
         }
 
+        //Gestionnaire de déclenchement de la converssion via un bouton
         private async void BtnConvert_Click(object sender, EventArgs e)
         {
+            //Valider les entrées avant de commencer
             if (!ValidateInputs()) return;
 
             try
             {
-
+                //Lancement de la conversion asynchrone
                 var conversionResult = await _conversionService.ConvertAsync(
                     txtXmlFile.Text,
                     txtXslFile.Text,
                     txtOutputDir.Text
-                    //progress
                     );
 
                 if (conversionResult.Success)
                 {
                     LogMessage($"✅ Conversion réussie en {FormatDuration(conversionResult.Duration)}!");
 
+                    //Ouverture automatique du PDF si l'option est cochée 
                     if (chkOpenResult.Checked)
                     {
                         try
@@ -417,34 +438,40 @@ namespace XmlToPdfConverter.GUI
                             LogMessage($"⚠ Impossible d'ouvrir le PDF: {ex.Message}");
                         }
                     }
-
+                    //Message de succès de conversion avec taille du fichier PDF en octets et durée
                     MessageBox.Show($"Conversion réussie!\nTaille: {conversionResult.FileSizeBytes} octets\nDurée: {FormatDuration(conversionResult.Duration)}",
                                    "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
                 {
+                    //Message indiquée un echec de la conversion avec message d'erreur
                     LogMessage($"❌ Conversion échouée: {conversionResult.ErrorMessage}");
                     MessageBox.Show($"Conversion échouée: {conversionResult.ErrorMessage}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
             finally
             {
+                //Restauration de l'état du bouton et de la barre de progression
                 btnConvert.Text = "Convertir en PDF";
                 btnConvert.BackColor = Color.FromArgb(0, 120, 215);
                 progressBar.MarqueeAnimationSpeed = 0;
 
             }
-        }        
+        }
 
+        //Activation ou non de l'animation de la barre de progression (marquee)
         private void SetProgressBarActive(bool active)
         {
+            //Vérification de si on doit invoquer sur le thread UI
             if (progressBar.InvokeRequired)
             {
                 progressBar.Invoke(new Action<bool>(SetProgressBarActive), active);
                 return;
             }
+            //Active ou désactive l'animation
             progressBar.MarqueeAnimationSpeed = active ? 30 : 0;
-        }        
+        }
+        //Affichage intelligent de la durée en fonction de cell-ci
         private static string FormatDuration(TimeSpan duration)
         {
             if (duration.TotalMinutes < 1)
